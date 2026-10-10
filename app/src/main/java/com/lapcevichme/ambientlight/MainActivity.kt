@@ -57,6 +57,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.lapcevichme.ambientlight.player.AmbientPlayerContainer
 import com.lapcevichme.ambientlight.ui.theme.AmbientLightTheme
 
+import android.net.Uri
+import androidx.media3.common.PlaybackException
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,10 +72,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+data class SampleVideo(val title: String, val uriString: (packageName: String) -> String)
+
 private val SAMPLE_VIDEOS = listOf(
-    "Big Buck Bunny (Nature)" to "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    "Tears of Steel (Sci-Fi / High Contrast)" to "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-    "Elephants Dream (Abstract)" to "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+    SampleVideo("Оффлайн демо (Цвета + Letterbox)", { pkg -> "android.resource://$pkg/${R.raw.sample_ambient}" }),
+    SampleVideo("Big Buck Bunny (Онлайн)", { _ -> "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" }),
+    SampleVideo("Tears of Steel (Онлайн)", { _ -> "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4" }),
+    SampleVideo("Elephants Dream (Онлайн)", { _ -> "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4" })
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,6 +94,10 @@ fun AmbientSandboxScreen() {
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
 
+    // Playback state
+    var playbackStatus by remember { mutableStateOf("Загрузка...") }
+    var playbackError by remember { mutableStateOf<String?>(null) }
+
     // Dynamic dominant ambient color (for UI outline shadow tinting)
     var dominantColor by remember { mutableStateOf(Color(0xFF222222)) }
 
@@ -95,17 +105,41 @@ fun AmbientSandboxScreen() {
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             repeatMode = Player.REPEAT_MODE_ALL
-            val mediaItem = MediaItem.fromUri(SAMPLE_VIDEOS[currentVideoIndex].second)
-            setMediaItem(mediaItem)
+            val uriStr = SAMPLE_VIDEOS[currentVideoIndex].uriString(context.packageName)
+            setMediaItem(MediaItem.fromUri(Uri.parse(uriStr)))
             prepare()
             playWhenReady = true
         }
     }
 
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                playbackStatus = when (playbackState) {
+                    Player.STATE_IDLE -> "Остановлен"
+                    Player.STATE_BUFFERING -> "Буферизация..."
+                    Player.STATE_READY -> "Воспроизведение"
+                    Player.STATE_ENDED -> "Завершено"
+                    else -> "Неизвестно"
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                playbackError = "Сбой сети/видео: ${error.errorCodeName}"
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+        }
+    }
+
     DisposableEffect(currentVideoIndex) {
-        val mediaItem = MediaItem.fromUri(SAMPLE_VIDEOS[currentVideoIndex].second)
-        exoPlayer.setMediaItem(mediaItem)
+        playbackError = null
+        val uriStr = SAMPLE_VIDEOS[currentVideoIndex].uriString(context.packageName)
+        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(uriStr)))
         exoPlayer.prepare()
+        exoPlayer.play()
         onDispose { }
     }
 
@@ -159,9 +193,29 @@ fun AmbientSandboxScreen() {
                 )
             }
 
+            // Playback status or error indicator
+            if (playbackError != null) {
+                Surface(
+                    color = Color(0xFF441111),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "$playbackError (включите 'Оффлайн демо')",
+                        color = Color(0xFFFF8888),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
             // Mock YouTube Interface with Dynamic Ambient Shadows
             MockYouTubeContent(
-                title = SAMPLE_VIDEOS[currentVideoIndex].first,
+                title = SAMPLE_VIDEOS[currentVideoIndex].title,
+                statusText = playbackStatus,
                 ambientShadowColor = dominantColor
             )
 
@@ -191,6 +245,7 @@ fun AmbientSandboxScreen() {
 @Composable
 fun MockYouTubeContent(
     title: String,
+    statusText: String = "Воспроизведение",
     ambientShadowColor: Color
 ) {
     Column(
@@ -205,7 +260,7 @@ fun MockYouTubeContent(
             color = Color.White
         )
         Text(
-            text = "1.2 млн просмотров • 1 год назад",
+            text = "Статус: $statusText • 1.2 млн просмотров",
             fontSize = 12.sp,
             color = Color.Gray
         )
