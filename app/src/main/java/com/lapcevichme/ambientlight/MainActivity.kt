@@ -1,14 +1,19 @@
 package com.lapcevichme.ambientlight
 
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -47,6 +52,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -97,6 +103,29 @@ private val SAMPLE_VIDEOS = listOf(
     SampleVideo("Elephants Dream (Онлайн)", { _ -> "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4" })
 )
 
+private fun queryDisplayName(context: Context, uri: Uri): String? {
+    if (uri.scheme == "content") {
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1 && cursor.moveToFirst()) {
+                    val name = cursor.getString(nameIndex)
+                    if (!name.isNullOrBlank()) return name
+                }
+            }
+        } catch (_: Throwable) {
+            // Fall back to URI segment
+        }
+    }
+    return uri.lastPathSegment
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AmbientSandboxScreen() {
@@ -111,12 +140,40 @@ fun AmbientSandboxScreen() {
     var blurRadius by remember { mutableFloatStateOf(90f) }
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
+    var customVideoUri by remember { mutableStateOf<Uri?>(null) }
+    var customVideoName by remember { mutableStateOf<String?>(null) }
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
 
     // Playback state
     var playbackStatus by remember { mutableStateOf("Загрузка...") }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var framesCount by remember { mutableStateOf(0L) }
+
+    // ExoPlayer lifecycle management
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            repeatMode = Player.REPEAT_MODE_ALL
+            playWhenReady = true
+        }
+    }
+
+    val activeVideoTitle = customVideoName ?: SAMPLE_VIDEOS[currentVideoIndex].title
+
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val name = queryDisplayName(context, uri) ?: "Видео из галереи"
+            customVideoName = name
+            if (customVideoUri == uri) {
+                playbackError = null
+                exoPlayer.seekTo(0)
+                exoPlayer.play()
+            } else {
+                customVideoUri = uri
+            }
+        }
+    }
 
     // Dynamic dominant ambient color (for UI outline shadow tinting)
     var dominantColor by remember { mutableStateOf(Color(0xFF333333)) }
@@ -142,17 +199,6 @@ fun AmbientSandboxScreen() {
         onDispose { }
     }
 
-    // ExoPlayer lifecycle management
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_ALL
-            val uriStr = SAMPLE_VIDEOS[currentVideoIndex].uriString(context.packageName)
-            setMediaItem(MediaItem.fromUri(Uri.parse(uriStr)))
-            prepare()
-            playWhenReady = true
-        }
-    }
-
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -166,7 +212,7 @@ fun AmbientSandboxScreen() {
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                playbackError = "Сбой сети/видео: ${error.errorCodeName}"
+                playbackError = "Сбой воспроизведения: ${error.errorCodeName}"
             }
         }
         exoPlayer.addListener(listener)
@@ -175,13 +221,12 @@ fun AmbientSandboxScreen() {
         }
     }
 
-    DisposableEffect(currentVideoIndex) {
+    LaunchedEffect(currentVideoIndex, customVideoUri) {
         playbackError = null
-        val uriStr = SAMPLE_VIDEOS[currentVideoIndex].uriString(context.packageName)
-        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(uriStr)))
+        val mediaUri = customVideoUri ?: Uri.parse(SAMPLE_VIDEOS[currentVideoIndex].uriString(context.packageName))
+        exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri))
         exoPlayer.prepare()
         exoPlayer.play()
-        onDispose { }
     }
 
     DisposableEffect(Unit) {
@@ -214,6 +259,7 @@ fun AmbientSandboxScreen() {
             backdropView = backdropView,
             textureView = textureView,
             dominantColor = dominantColor,
+            videoTitle = activeVideoTitle,
             isEnabled = isEnabled,
             onToggleEnabled = { isEnabled = it },
             onExitFullscreen = { isFullscreen = false }
@@ -223,6 +269,7 @@ fun AmbientSandboxScreen() {
             backdropView = backdropView,
             textureView = textureView,
             dominantColor = dominantColor,
+            activeVideoTitle = activeVideoTitle,
             isEnabled = isEnabled,
             onEnabledChange = { isEnabled = it },
             spreadLimit = spreadLimit,
@@ -236,8 +283,19 @@ fun AmbientSandboxScreen() {
             flickerReduction = flickerReduction,
             onFlickerReductionChange = { flickerReduction = it },
             currentVideoIndex = currentVideoIndex,
+            isCustomVideo = customVideoUri != null,
             onSwitchVideo = {
-                currentVideoIndex = (currentVideoIndex + 1) % SAMPLE_VIDEOS.size
+                if (customVideoUri != null) {
+                    customVideoUri = null
+                    customVideoName = null
+                } else {
+                    currentVideoIndex = (currentVideoIndex + 1) % SAMPLE_VIDEOS.size
+                }
+            },
+            onPickGalleryVideo = {
+                videoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                )
             },
             onEnterFullscreen = { isFullscreen = true },
             playbackStatus = playbackStatus,
@@ -252,6 +310,7 @@ fun FullscreenLandscapePlayer(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
     dominantColor: Color,
+    videoTitle: String,
     isEnabled: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
     onExitFullscreen: () -> Unit
@@ -348,7 +407,7 @@ fun FullscreenLandscapePlayer(
                         .padding(bottom = 6.dp)
                 ) {
                     Text(
-                        "Горизонтальный режим 20:9: Боковые полосы (Pillarbox) заполняются мягким свечением",
+                        "$videoTitle • Полноэкранный режим с подсветкой",
                         color = Color(0xFFEEEEEE),
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
@@ -365,6 +424,7 @@ fun PortraitSandboxView(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
     dominantColor: Color,
+    activeVideoTitle: String,
     isEnabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     spreadLimit: Float,
@@ -378,7 +438,9 @@ fun PortraitSandboxView(
     flickerReduction: Int,
     onFlickerReductionChange: (Int) -> Unit,
     currentVideoIndex: Int,
+    isCustomVideo: Boolean,
     onSwitchVideo: () -> Unit,
+    onPickGalleryVideo: () -> Unit,
     onEnterFullscreen: () -> Unit,
     playbackStatus: String,
     playbackError: String?,
@@ -485,7 +547,7 @@ fun PortraitSandboxView(
 
                     // Mock YouTube Interface with Dynamic Ambient Shadows
                     MockYouTubeContent(
-                        title = SAMPLE_VIDEOS[currentVideoIndex].title,
+                        title = activeVideoTitle,
                         statusText = playbackStatus,
                         framesCount = framesCount,
                         ambientShadowColor = dominantColor
@@ -510,7 +572,9 @@ fun PortraitSandboxView(
                 flickerReduction = flickerReduction,
                 onFlickerReductionChange = onFlickerReductionChange,
                 currentVideoIndex = currentVideoIndex,
+                isCustomVideo = isCustomVideo,
                 onSwitchVideo = onSwitchVideo,
+                onPickGalleryVideo = onPickGalleryVideo,
                 onEnterFullscreen = onEnterFullscreen
             )
 
@@ -680,7 +744,9 @@ fun AmbientControlPanel(
     flickerReduction: Int,
     onFlickerReductionChange: (Int) -> Unit,
     currentVideoIndex: Int,
+    isCustomVideo: Boolean,
     onSwitchVideo: () -> Unit,
+    onPickGalleryVideo: () -> Unit,
     onEnterFullscreen: () -> Unit
 ) {
     Card(
@@ -701,13 +767,30 @@ fun AmbientControlPanel(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Gallery Video Picker Button
+            Button(
+                onClick = onPickGalleryVideo,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("📁 Выбрать видео из галереи")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Switch Video Button
             Button(
                 onClick = onSwitchVideo,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Сменить тестовое видео (${currentVideoIndex + 1}/${SAMPLE_VIDEOS.size})")
+                Text(
+                    if (isCustomVideo) {
+                        "Вернуться к тестовым видео (${currentVideoIndex + 1}/${SAMPLE_VIDEOS.size})"
+                    } else {
+                        "Сменить тестовое видео (${currentVideoIndex + 1}/${SAMPLE_VIDEOS.size})"
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
