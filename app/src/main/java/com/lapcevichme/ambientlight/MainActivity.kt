@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -92,10 +93,10 @@ fun AmbientSandboxScreen() {
 
     // Ambient settings state
     var isEnabled by remember { mutableStateOf(true) }
-    var spreadDistance by remember { mutableFloatStateOf(1.0f) } // 1.0 = covers entire screen
+    var spreadLimit by remember { mutableFloatStateOf(0.55f) }
     var brightness by remember { mutableFloatStateOf(1.0f) }
     var vibrance by remember { mutableFloatStateOf(0.40f) }
-    var blurRadius by remember { mutableFloatStateOf(110f) }
+    var blurRadius by remember { mutableFloatStateOf(90f) }
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
 
@@ -107,7 +108,7 @@ fun AmbientSandboxScreen() {
     // Dynamic dominant ambient color (for UI outline shadow tinting)
     var dominantColor by remember { mutableStateOf(Color(0xFF333333)) }
 
-    // Shared Views & Buffers
+    // Shared Views & Buffers attached to the player stage
     val backdropView = remember { AmbientBackdropView(context) }
     val textureView = remember { InterceptingTextureView(context) }
     val frameBufferBitmap = remember { Bitmap.createBitmap(32, 18, Bitmap.Config.ARGB_8888) }
@@ -172,128 +173,133 @@ fun AmbientSandboxScreen() {
         }
     }
 
-    // Root layout: Backdrop is placed at Z-index 0 across the entire screen
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
-    ) {
-        // 1. FULL-SCREEN AMBIENT BACKDROP
-        AndroidView(
-            factory = { backdropView },
-            update = { view ->
-                view.isAmbientEnabled = isEnabled
-                view.spreadDistance = spreadDistance
-                view.brightness = brightness
-                view.vibrance = vibrance
-                view.blurRadius = blurRadius
-                view.flickerReduction = flickerReduction
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // 2. FOREGROUND CONTENT & UI
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Ambient Light for YouTube",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0x660F0F0F), // Frosted semi-transparent header
-                        titleContentColor = Color.White
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Ambient Light for YouTube",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
                     )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF0F0F0F),
+                    titleContentColor = Color.White
                 )
-            },
-            containerColor = Color.Transparent // Transparent so ambient glow illuminates behind content
-        ) { innerPadding ->
-            Column(
+            )
+        },
+        containerColor = Color(0xFF0F0F0F)
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // STAGE CONTAINER: Houses the Ambient Backdrop and Player + Video metadata.
+            // Scrolls naturally with the page content; no duplicated ghost player.
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
+                    .fillMaxWidth()
+                    .wrapContentHeight()
             ) {
-                // Video Player Container (With subtle rounded corners & elevation)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .aspectRatio(16f / 9f)
-                        .shadow(
-                            elevation = 12.dp,
-                            shape = RoundedCornerShape(12.dp),
-                            ambientColor = dominantColor,
-                            spotColor = dominantColor
-                        )
-                ) {
-                    AndroidView(
-                        factory = {
-                            textureView.apply {
-                                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                                    updateVideoCoordinates(view, backdropView)
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                // LAYER 0: Ambient Backdrop View matching the video + metadata stage
+                AndroidView(
+                    factory = { backdropView },
+                    update = { view ->
+                        view.isAmbientEnabled = isEnabled
+                        view.spreadLimit = spreadLimit
+                        view.brightness = brightness
+                        view.vibrance = vibrance
+                        view.blurRadius = blurRadius
+                        view.flickerReduction = flickerReduction
+                    },
+                    modifier = Modifier.matchParentSize()
+                )
 
-                // Playback status or error indicator
-                if (playbackError != null) {
-                    Surface(
-                        color = Color(0xCC441111),
-                        shape = RoundedCornerShape(8.dp),
+                // LAYER 1: Active Video and Metadata UI sitting directly over the ambient glow
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Video Player
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .aspectRatio(16f / 9f)
+                            .shadow(
+                                elevation = 12.dp,
+                                shape = RoundedCornerShape(12.dp),
+                                ambientColor = dominantColor,
+                                spotColor = dominantColor
+                            )
                     ) {
-                        Text(
-                            text = "$playbackError (включите 'Оффлайн демо')",
-                            color = Color(0xFFFF8888),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                        AndroidView(
+                            factory = {
+                                textureView.apply {
+                                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                                        updateVideoCoordinates(view, backdropView)
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
-                }
 
-                // Mock YouTube Interface with Dynamic Ambient Shadows
-                MockYouTubeContent(
-                    title = SAMPLE_VIDEOS[currentVideoIndex].title,
-                    statusText = playbackStatus,
-                    framesCount = framesCount,
-                    ambientShadowColor = dominantColor
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Sandbox Controls Panel
-                AmbientControlPanel(
-                    isEnabled = isEnabled,
-                    onEnabledChange = { isEnabled = it },
-                    spreadDistance = spreadDistance,
-                    onSpreadDistanceChange = { spreadDistance = it },
-                    brightness = brightness,
-                    onBrightnessChange = { brightness = it },
-                    vibrance = vibrance,
-                    onVibranceChange = { vibrance = it },
-                    blurRadius = blurRadius,
-                    onBlurRadiusChange = { blurRadius = it },
-                    flickerReduction = flickerReduction,
-                    onFlickerReductionChange = { flickerReduction = it },
-                    currentVideoIndex = currentVideoIndex,
-                    onSwitchVideo = {
-                        currentVideoIndex = (currentVideoIndex + 1) % SAMPLE_VIDEOS.size
+                    // Playback status or error indicator
+                    if (playbackError != null) {
+                        Surface(
+                            color = Color(0xCC441111),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "$playbackError (включите 'Оффлайн демо')",
+                                color = Color(0xFFFF8888),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
                     }
-                )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                    // Mock YouTube Interface with Dynamic Ambient Shadows
+                    MockYouTubeContent(
+                        title = SAMPLE_VIDEOS[currentVideoIndex].title,
+                        statusText = playbackStatus,
+                        framesCount = framesCount,
+                        ambientShadowColor = dominantColor
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Sandbox Controls Panel (Clearly separated below the player stage)
+            AmbientControlPanel(
+                isEnabled = isEnabled,
+                onEnabledChange = { isEnabled = it },
+                spreadLimit = spreadLimit,
+                onSpreadLimitChange = { spreadLimit = it },
+                brightness = brightness,
+                onBrightnessChange = { brightness = it },
+                vibrance = vibrance,
+                onVibranceChange = { vibrance = it },
+                blurRadius = blurRadius,
+                onBlurRadiusChange = { blurRadius = it },
+                flickerReduction = flickerReduction,
+                onFlickerReductionChange = { flickerReduction = it },
+                currentVideoIndex = currentVideoIndex,
+                onSwitchVideo = {
+                    currentVideoIndex = (currentVideoIndex + 1) % SAMPLE_VIDEOS.size
+                }
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -323,7 +329,7 @@ fun MockYouTubeContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
         Text(
             text = title,
@@ -435,7 +441,7 @@ fun MockYouTubeContent(
                 Text("Комментарии • 4,8 тыс.", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "Свечение теперь плавно заливает всю страницу позади интерфейса и отбрасывает мягкие цветные тени!",
+                    "Свечение исходит строго из-под кромок плеера, освещая интерфейс вокруг и скроллясь вместе с ним!",
                     color = Color(0xFFDDDDDD),
                     fontSize = 12.sp
                 )
@@ -448,8 +454,8 @@ fun MockYouTubeContent(
 fun AmbientControlPanel(
     isEnabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
-    spreadDistance: Float,
-    onSpreadDistanceChange: (Float) -> Unit,
+    spreadLimit: Float,
+    onSpreadLimitChange: (Float) -> Unit,
     brightness: Float,
     onBrightnessChange: (Float) -> Unit,
     vibrance: Float,
@@ -502,22 +508,21 @@ fun AmbientControlPanel(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Spread Distance Slider (can reach full screen)
-            val spreadLabel = if (spreadDistance >= 1.0f) "на весь экран" else "${(spreadDistance * 100).toInt()}%"
-            Text("Дальность размытия (Spread): $spreadLabel", color = Color.White, fontSize = 12.sp)
+            // Spread Limit Slider (emanates outwards from player perimeter)
+            Text("Дальность лучей (Spread): ${(spreadLimit * 100).toInt()}%", color = Color.White, fontSize = 12.sp)
             Slider(
-                value = spreadDistance,
-                onValueChange = onSpreadDistanceChange,
-                valueRange = 0.15f..1.6f,
+                value = spreadLimit,
+                onValueChange = onSpreadLimitChange,
+                valueRange = 0.1f..1.0f,
                 enabled = isEnabled
             )
 
             // Blur Radius Slider
-            Text("Радиус размытия (Blur): ${blurRadius.toInt()} dp", color = Color.White, fontSize = 12.sp)
+            Text("Мягкость размытия (Blur): ${blurRadius.toInt()} dp", color = Color.White, fontSize = 12.sp)
             Slider(
                 value = blurRadius,
                 onValueChange = onBlurRadiusChange,
-                valueRange = 10f..180f,
+                valueRange = 15f..160f,
                 enabled = isEnabled
             )
 

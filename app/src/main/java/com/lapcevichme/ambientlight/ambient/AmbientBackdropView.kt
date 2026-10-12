@@ -48,12 +48,12 @@ class AmbientBackdropView @JvmOverloads constructor(
         }
 
     /**
-     * Spread reach distance: 0.15 = tight aura around video, 1.0+ = illuminates full page/screen.
+     * Spread reach distance: 0.15 = tight aura around video, 0.8+ = deep expansion into UI.
      */
-    var spreadDistance: Float = 0.8f
+    var spreadLimit: Float = 0.45f
         set(value) {
             field = value
-            ambientShader?.updateSpreadDistance(value)
+            ambientShader?.updateSpreadLimit(value)
             postInvalidateOnAnimation()
         }
 
@@ -105,7 +105,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         try {
             val shader = AmbientShader()
             ambientShader = shader
-            shader.updateSpreadDistance(spreadDistance)
+            shader.updateSpreadLimit(spreadLimit)
             shader.updateBrightness(brightness)
             shader.updateVibrance(vibrance)
             shader.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)

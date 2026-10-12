@@ -10,13 +10,14 @@ import androidx.annotation.RequiresApi
 import org.intellij.lang.annotations.Language
 
 /**
- * Manages the AGSL (Android Graphics Shading Language) runtime shader for full-screen ambient lighting.
+ * Manages the AGSL runtime shader for localized ambient light radiating from behind the player.
  *
  * Implements:
- * 1. Edge-clamped spatial projection from arbitrary video coordinates across the entire screen.
- * 2. Letterbox/pillarbox compensation: crops inactive border margins.
- * 3. Vibrance boosting: non-linear saturation curve ported from Wessel Kroos' projector-webgl.js.
- * 4. Controllable spread distance falloff: allows ambient glow to reach from tight player aura to full-page immersion.
+ * 1. Perimeter sampling: rays and glow emanate from the actual video borders outward.
+ * 2. Letterbox/pillarbox crop compensation.
+ * 3. Vibrance boosting in HSV color space.
+ * 4. Center attenuation: dims pixels directly underneath the player so no sharp duplicate video is rendered.
+ * 5. Radial distance falloff: smoothly dissolves light into the page background.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class AmbientShader {
@@ -26,10 +27,10 @@ class AmbientShader {
         uniform shader videoTexture;
         uniform float2 uResolution;
         uniform float2 uTextureResolution;
-        uniform float4 uVideoRect; // Normalized (left, top, right, bottom) in screen UV [0, 1]
+        uniform float4 uVideoRect; // Normalized (left, top, right, bottom) of video in backdrop space [0, 1]
         uniform float2 uCropOffset;
         uniform float2 uCropScale;
-        uniform float uSpreadDistance;
+        uniform float uSpreadLimit;
         uniform float uVibrance;
         uniform float uBrightness;
 
@@ -64,15 +65,14 @@ class AmbientShader {
         }
 
         half4 main(float2 fragCoord) {
-            float2 screenUV = fragCoord / uResolution;
+            float2 uv = fragCoord / uResolution;
 
-            // Project screen UV onto the video rectangle:
-            // Pixels below the video sample bottom edge colors, pixels above sample top edge colors.
-            float2 clampedScreenUV = clamp(screenUV, uVideoRect.xy, uVideoRect.zw);
+            // Clamp coordinate to the video perimeter to expand border colors outward
+            float2 clampedUV = clamp(uv, uVideoRect.xy, uVideoRect.zw);
 
             // Normalized coordinates inside the video [0, 1]
             float2 videoSize = max(uVideoRect.zw - uVideoRect.xy, float2(0.001));
-            float2 normVideoUV = (clampedScreenUV - uVideoRect.xy) / videoSize;
+            float2 normVideoUV = (clampedUV - uVideoRect.xy) / videoSize;
 
             // Apply letterbox crop compensation
             float2 croppedUV = uCropOffset + (normVideoUV * uCropScale);
@@ -89,17 +89,19 @@ class AmbientShader {
             }
 
             // Aspect-ratio normalized Euclidean distance from video bounds
-            float2 d = max(float2(0.0), max(uVideoRect.xy - screenUV, screenUV - uVideoRect.zw));
+            float2 d = max(float2(0.0), max(uVideoRect.xy - uv, uv - uVideoRect.zw));
             float aspect = uResolution.x / max(uResolution.y, 1.0);
             float dist = length(float2(d.x, d.y / aspect));
 
-            // Distance falloff curve:
-            // uSpreadDistance controls how far ambient light illuminates across the screen.
-            float spreadLimit = max(uSpreadDistance, 0.05);
-            float falloff = 1.0 - smoothstep(0.0, spreadLimit, dist);
+            // Radial falloff: light emanates from perimeter and softly dissolves outward
+            float spread = max(uSpreadLimit, 0.01);
+            float falloff = 1.0 - smoothstep(0.0, spread, dist);
 
-            // Modulate intensity by falloff and user brightness
-            float intensity = falloff * uBrightness;
+            // Dim center under the video to prevent duplicate player rendering
+            float centerAttenuation = smoothstep(0.0, 0.05, dist);
+            float edgeFactor = mix(0.25, 1.0, centerAttenuation);
+
+            float intensity = falloff * edgeFactor * uBrightness;
 
             // Output premultiplied alpha color for proper Skia blending
             return half4(color.rgb * intensity, intensity);
@@ -109,16 +111,15 @@ class AmbientShader {
     val runtimeShader = RuntimeShader(shaderSource)
 
     init {
-        // Initialize default safe uniforms to avoid driver crashes before first frame arrives
         val dummy = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
             setPixel(0, 0, Color.DKGRAY)
         }
         updateTexture(dummy)
         updateResolution(100f, 100f)
-        updateVideoRect(0f, 0f, 1f, 0.3f)
+        updateVideoRect(0.1f, 0.1f, 0.9f, 0.5f)
         updateCrop(CropBounds())
-        updateSpreadDistance(0.6f)
-        updateVibrance(0.35f)
+        updateSpreadLimit(0.4f)
+        updateVibrance(0.4f)
         updateBrightness(1.0f)
     }
 
@@ -146,8 +147,8 @@ class AmbientShader {
         runtimeShader.setFloatUniform("uCropScale", cropScaleX.coerceAtLeast(0.01f), cropScaleY.coerceAtLeast(0.01f))
     }
 
-    fun updateSpreadDistance(distance: Float) {
-        runtimeShader.setFloatUniform("uSpreadDistance", distance)
+    fun updateSpreadLimit(limit: Float) {
+        runtimeShader.setFloatUniform("uSpreadLimit", limit)
     }
 
     fun updateVibrance(vibrance: Float) {
