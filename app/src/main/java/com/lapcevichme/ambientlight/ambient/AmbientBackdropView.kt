@@ -50,7 +50,7 @@ class AmbientBackdropView @JvmOverloads constructor(
     /**
      * Spread reach distance: 0.15 = tight aura around video, 0.8+ = deep expansion into UI.
      */
-    var spreadLimit: Float = 0.45f
+    var spreadLimit: Float = 0.55f
         set(value) {
             field = value
             ambientShader?.updateSpreadLimit(value)
@@ -81,7 +81,7 @@ class AmbientBackdropView @JvmOverloads constructor(
             postInvalidateOnAnimation()
         }
 
-    var blurRadius: Float = 100f
+    var blurRadius: Float = 22f
         set(value) {
             field = value
             updateBlurEffect()

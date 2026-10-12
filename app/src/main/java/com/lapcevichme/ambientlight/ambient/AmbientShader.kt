@@ -96,30 +96,23 @@ class AmbientShader {
             float falloff = 0.0;
 
             if (s <= 1.0) {
-                // Inside video bounds: direct radial video mapping
+                // Inside video bounds: solid full brightness so blur does not create dark dips near borders
                 normVideoUV = p * 0.5 + 0.5;
-                float centerAttenuation = smoothstep(0.65, 1.0, s);
-                falloff = mix(0.20, 1.0, centerAttenuation);
+                falloff = 1.0;
             } else {
-                // Outside video bounds: Wessel Kroos perspective multiTexture projection
-                // 1. Exact continuous perimeter ray coordinates (seamless matching at the video edge):
-                float2 perimeterUV = (p / s) * 0.5 + 0.5;
+                // Outside video bounds: Wessel Kroos stepped perspective multiTexture projection
+                float2 absP = abs(p);
+                float2 iUV = (uScale - absP) / uScaleStep;
+                float2 maxI = floor(max((uScale - float2(1.0)) / uScaleStep, float2(0.0)));
+                float impreciseI = clamp(floor(min(iUV.x, iUV.y)), 0.0, min(maxI.x, maxI.y));
 
-                // 2. Wessel Kroos stepped perspective projection:
-                float r = (abs(p.x) >= abs(p.y)) ? ratio.x : ratio.y;
-                float stepDist = (s - 1.0) / max(edge * r, 0.001);
-                float stepIndex = floor(stepDist);
+                float2 denom = max(uScale - uScaleStep * impreciseI, float2(1.0));
+                float2 sampleP = p / denom;
+                normVideoUV = clamp(sampleP * 0.5 + 0.5, float2(0.0), float2(1.0));
 
-                float currentScale = 1.0 + (stepIndex + 1.0) * edge * r;
-                float2 steppedUV = clamp((p / currentScale) * 0.5 + 0.5, float2(0.0), float2(1.0));
-
-                // Seamless transition: right at the edge (s -> 1.0), 100% perimeterUV ensures
-                // perfect color alignment with the video edge. Moving outward, it blends with steppedUV.
-                float edgeDist = clamp((s - 1.0) / max(edge * r, 0.001), 0.0, 1.0);
-                normVideoUV = mix(perimeterUV, steppedUV, edgeDist * 0.5);
-
-                // Distance falloff matching Wessel Kroos' projector-shadow.js
-                float maxDist = max(uScale.x - 1.0, 0.01);
+                // Isotropic distance falloff matching Wessel Kroos' projector-shadow.js
+                float r = (absP.x >= absP.y) ? ratio.x : ratio.y;
+                float maxDist = max(spread * 2.2 * r, 0.01);
                 float dist = (s - 1.0) / maxDist;
 
                 if (dist < 1.0) {

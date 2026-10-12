@@ -139,7 +139,7 @@ fun AmbientSandboxScreen() {
     var edgeSize by remember { mutableFloatStateOf(0.12f) }
     var brightness by remember { mutableFloatStateOf(1.0f) }
     var vibrance by remember { mutableFloatStateOf(0.0f) }
-    var blurRadius by remember { mutableFloatStateOf(90f) }
+    var blurRadius by remember { mutableFloatStateOf(22f) }
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
     var customVideoUri by remember { mutableStateOf<Uri?>(null) }
@@ -485,8 +485,8 @@ fun FullscreenLandscapePlayer(
         AndroidView(
             factory = {
                 backdropView.apply {
-                    addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                        updateVideoCoordinates(textureView, backdropView)
+                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                        view.post { updateVideoCoordinates(textureView, backdropView) }
                     }
                 }
             },
@@ -505,7 +505,7 @@ fun FullscreenLandscapePlayer(
                 factory = {
                     textureView.apply {
                         addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                            updateVideoCoordinates(view, backdropView)
+                            view.post { updateVideoCoordinates(view, backdropView) }
                         }
                     }
                 },
@@ -631,8 +631,8 @@ fun PortraitSandboxView(
                 AndroidView(
                     factory = {
                         backdropView.apply {
-                            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                                updateVideoCoordinates(textureView, backdropView)
+                            addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                                view.post { updateVideoCoordinates(textureView, backdropView) }
                             }
                         }
                     },
@@ -659,7 +659,7 @@ fun PortraitSandboxView(
                             factory = {
                                 textureView.apply {
                                     addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                                        updateVideoCoordinates(view, backdropView)
+                                        view.post { updateVideoCoordinates(view, backdropView) }
                                     }
                                 }
                             },
@@ -732,6 +732,10 @@ fun PortraitSandboxView(
 }
 
 private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdropView) {
+    if (videoView.width <= 0 || videoView.height <= 0 || backdropView.width <= 0 || backdropView.height <= 0) {
+        videoView.post { updateVideoCoordinates(videoView, backdropView) }
+        return
+    }
     val videoLoc = IntArray(2)
     videoView.getLocationOnScreen(videoLoc)
 
@@ -969,7 +973,7 @@ fun AmbientControlPanel(
             Slider(
                 value = blurRadius,
                 onValueChange = onBlurRadiusChange,
-                valueRange = 0f..160f,
+                valueRange = 0f..80f,
                 enabled = isEnabled
             )
 
