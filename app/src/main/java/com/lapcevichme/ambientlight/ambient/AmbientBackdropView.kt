@@ -15,12 +15,10 @@ import android.view.View
 import androidx.annotation.RequiresApi
 
 /**
- * Custom View rendering the dynamic ambient lighting glow beneath the player.
+ * Custom View rendering the dynamic ambient lighting glow.
  *
- * Primary mode (Android 13+): AGSL RuntimeShader for geometry transformation and color tuning,
- * with Skia hardware-accelerated RenderEffect blur for the soft dispersion aura.
- *
- * Fallback mode (Android 9-12): Hardware scaled bitmap drawing with RenderEffect (API 31+) or bilinear filtering.
+ * Designed to sit as the root backdrop across the entire viewing page/screen (like watch_while_layout).
+ * Projects ambient light outwards from the video coordinates into the surrounding UI and screen edges.
  */
 class AmbientBackdropView @JvmOverloads constructor(
     context: Context,
@@ -49,21 +47,31 @@ class AmbientBackdropView @JvmOverloads constructor(
             postInvalidateOnAnimation()
         }
 
-    var spread: Float = 1.35f
+    /**
+     * Spread reach distance: 0.15 = tight aura around video, 1.0+ = illuminates full page/screen.
+     */
+    var spreadDistance: Float = 0.8f
         set(value) {
             field = value
-            ambientShader?.updateSpread(value)
+            ambientShader?.updateSpreadDistance(value)
             postInvalidateOnAnimation()
         }
 
-    var vibrance: Float = 0.25f
+    var brightness: Float = 1.0f
+        set(value) {
+            field = value
+            ambientShader?.updateBrightness(value)
+            postInvalidateOnAnimation()
+        }
+
+    var vibrance: Float = 0.35f
         set(value) {
             field = value
             ambientShader?.updateVibrance(value)
             postInvalidateOnAnimation()
         }
 
-    var blurRadius: Float = 80f
+    var blurRadius: Float = 100f
         set(value) {
             field = value
             updateBlurEffect()
@@ -78,6 +86,12 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var onDominantColorListener: ((Int) -> Unit)? = null
 
+    // Normalized coordinates of the active video stream within this backdrop [0..1]
+    private var videoNormLeft = 0f
+    private var videoNormTop = 0f
+    private var videoNormRight = 1f
+    private var videoNormBottom = 0.35f
+
     init {
         setWillNotDraw(false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -91,8 +105,10 @@ class AmbientBackdropView @JvmOverloads constructor(
         try {
             val shader = AmbientShader()
             ambientShader = shader
-            shader.updateSpread(spread)
+            shader.updateSpreadDistance(spreadDistance)
+            shader.updateBrightness(brightness)
             shader.updateVibrance(vibrance)
+            shader.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)
             shaderPaint.shader = shader.runtimeShader
         } catch (e: Throwable) {
             // WORKAROUND: Fall back to scaled bitmap path if GPU driver fails AGSL compilation
@@ -108,6 +124,22 @@ class AmbientBackdropView @JvmOverloads constructor(
                 setRenderEffect(null)
             }
         }
+    }
+
+    /**
+     * Updates the video's layout position on screen to align spatial light projection.
+     */
+    fun updateVideoPosition(pixelLeft: Float, pixelTop: Float, pixelRight: Float, pixelBottom: Float) {
+        val w = width.toFloat().coerceAtLeast(1f)
+        val h = height.toFloat().coerceAtLeast(1f)
+
+        videoNormLeft = (pixelLeft / w).coerceIn(0f, 1f)
+        videoNormTop = (pixelTop / h).coerceIn(0f, 1f)
+        videoNormRight = (pixelRight / w).coerceIn(0f, 1f)
+        videoNormBottom = (pixelBottom / h).coerceIn(0f, 1f)
+
+        ambientShader?.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)
+        postInvalidateOnAnimation()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

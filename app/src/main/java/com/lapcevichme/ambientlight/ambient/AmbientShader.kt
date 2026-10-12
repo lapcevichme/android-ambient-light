@@ -2,6 +2,7 @@ package com.lapcevichme.ambientlight.ambient
 
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
+import android.graphics.Color
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
@@ -9,13 +10,13 @@ import androidx.annotation.RequiresApi
 import org.intellij.lang.annotations.Language
 
 /**
- * Manages the AGSL (Android Graphics Shading Language) runtime shader for ambient lighting.
+ * Manages the AGSL (Android Graphics Shading Language) runtime shader for full-screen ambient lighting.
  *
  * Implements:
- * 1. Geometric outward expansion (Spread): samples UV outward from video rect center.
+ * 1. Edge-clamped spatial projection from arbitrary video coordinates across the entire screen.
  * 2. Letterbox/pillarbox compensation: crops inactive border margins.
  * 3. Vibrance boosting: non-linear saturation curve ported from Wessel Kroos' projector-webgl.js.
- * 4. Quadratic edge falloff: softly tapers ambient glow near screen extremities.
+ * 4. Controllable spread distance falloff: allows ambient glow to reach from tight player aura to full-page immersion.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class AmbientShader {
@@ -25,10 +26,12 @@ class AmbientShader {
         uniform shader videoTexture;
         uniform float2 uResolution;
         uniform float2 uTextureResolution;
+        uniform float4 uVideoRect; // Normalized (left, top, right, bottom) in screen UV [0, 1]
         uniform float2 uCropOffset;
         uniform float2 uCropScale;
-        uniform float uSpread;
+        uniform float uSpreadDistance;
         uniform float uVibrance;
+        uniform float uBrightness;
 
         // Converts RGB color to HSV representation
         vec3 rgb2hsv(vec3 c) {
@@ -48,7 +51,6 @@ class AmbientShader {
         }
 
         // Non-linear saturation response curve from Wessel Kroos' projector-webgl.js.
-        // Provides vibrant tones without crushing highlight details or blowing out near-white pixels.
         float saturateValue(float c, float v) {
             float x = c;
             if (v < 0.0) {
@@ -62,13 +64,18 @@ class AmbientShader {
         }
 
         half4 main(float2 fragCoord) {
-            float2 normUV = fragCoord / uResolution;
+            float2 screenUV = fragCoord / uResolution;
 
-            // Outward projection: scale relative to center (0.5, 0.5)
-            float2 centered = (normUV - 0.5) / max(uSpread, 0.001) + 0.5;
+            // Project screen UV onto the video rectangle:
+            // Pixels below the video sample bottom edge colors, pixels above sample top edge colors.
+            float2 clampedScreenUV = clamp(screenUV, uVideoRect.xy, uVideoRect.zw);
+
+            // Normalized coordinates inside the video [0, 1]
+            float2 videoSize = max(uVideoRect.zw - uVideoRect.xy, float2(0.001));
+            float2 normVideoUV = (clampedScreenUV - uVideoRect.xy) / videoSize;
 
             // Apply letterbox crop compensation
-            float2 croppedUV = uCropOffset + (centered * uCropScale);
+            float2 croppedUV = uCropOffset + (normVideoUV * uCropScale);
             croppedUV = clamp(croppedUV, float2(0.0), float2(1.0));
 
             // Bilinear texture sample evaluated in downsampled pixel coordinates
@@ -81,12 +88,21 @@ class AmbientShader {
                 color.rgb = half3(hsv2rgb(hsv));
             }
 
-            // Soft vignette falloff towards outer edges
-            float2 dist = abs(normUV - 0.5) * 2.0;
-            float falloff = 1.0 - smoothstep(0.65, 1.0, max(dist.x, dist.y));
+            // Aspect-ratio normalized Euclidean distance from video bounds
+            float2 d = max(float2(0.0), max(uVideoRect.xy - screenUV, screenUV - uVideoRect.zw));
+            float aspect = uResolution.x / max(uResolution.y, 1.0);
+            float dist = length(float2(d.x, d.y / aspect));
 
-            // Return with premultiplied alpha for proper Skia blending
-            return half4(color.rgb * falloff, color.a * falloff);
+            // Distance falloff curve:
+            // uSpreadDistance controls how far ambient light illuminates across the screen.
+            float spreadLimit = max(uSpreadDistance, 0.05);
+            float falloff = 1.0 - smoothstep(0.0, spreadLimit, dist);
+
+            // Modulate intensity by falloff and user brightness
+            float intensity = falloff * uBrightness;
+
+            // Output premultiplied alpha color for proper Skia blending
+            return half4(color.rgb * intensity, intensity);
         }
     """.trimIndent()
 
@@ -95,17 +111,23 @@ class AmbientShader {
     init {
         // Initialize default safe uniforms to avoid driver crashes before first frame arrives
         val dummy = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
-            setPixel(0, 0, android.graphics.Color.DKGRAY)
+            setPixel(0, 0, Color.DKGRAY)
         }
         updateTexture(dummy)
         updateResolution(100f, 100f)
+        updateVideoRect(0f, 0f, 1f, 0.3f)
         updateCrop(CropBounds())
-        updateSpread(1.35f)
-        updateVibrance(0.25f)
+        updateSpreadDistance(0.6f)
+        updateVibrance(0.35f)
+        updateBrightness(1.0f)
     }
 
     fun updateResolution(width: Float, height: Float) {
         runtimeShader.setFloatUniform("uResolution", width, height)
+    }
+
+    fun updateVideoRect(left: Float, top: Float, right: Float, bottom: Float) {
+        runtimeShader.setFloatUniform("uVideoRect", left, top, right, bottom)
     }
 
     fun updateTexture(bitmap: Bitmap) {
@@ -124,12 +146,15 @@ class AmbientShader {
         runtimeShader.setFloatUniform("uCropScale", cropScaleX.coerceAtLeast(0.01f), cropScaleY.coerceAtLeast(0.01f))
     }
 
-    fun updateSpread(spread: Float) {
-        runtimeShader.setFloatUniform("uSpread", spread)
+    fun updateSpreadDistance(distance: Float) {
+        runtimeShader.setFloatUniform("uSpreadDistance", distance)
     }
 
     fun updateVibrance(vibrance: Float) {
-        // Uniform range: -1.0 to 1.0 (0.0 = original saturation)
         runtimeShader.setFloatUniform("uVibrance", vibrance)
+    }
+
+    fun updateBrightness(brightness: Float) {
+        runtimeShader.setFloatUniform("uBrightness", brightness)
     }
 }
