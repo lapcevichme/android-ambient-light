@@ -26,13 +26,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -613,12 +617,12 @@ fun PortraitSandboxView(
 ) {
     Scaffold(
         containerColor = Color(0xFF0F0F0F)
-    ) { innerPadding ->
+    ) { _ ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
         ) {
             // STAGE CONTAINER: Houses the Ambient Backdrop and Player + Video metadata.
             // Scrolls naturally with the page content; no duplicated ghost player.
@@ -643,8 +647,9 @@ fun PortraitSandboxView(
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Generous headroom above player so upward ambient glow rays are clearly visible
-                    Spacer(modifier = Modifier.height(28.dp))
+                    // Generous headroom extending behind status bar so upward ambient glow rays illuminate behind clock and battery icons
+                    Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Video Player (sitting seamlessly flush on the ambient backdrop without artificial elevation shadows)
                     Box(
