@@ -74,7 +74,7 @@ class AmbientBackdropView @JvmOverloads constructor(
             postInvalidateOnAnimation()
         }
 
-    var vibrance: Float = 0.35f
+    var vibrance: Float = 0.0f
         set(value) {
             field = value
             ambientShader?.updateVibrance(value)
@@ -101,6 +101,11 @@ class AmbientBackdropView @JvmOverloads constructor(
     private var videoNormTop = 0f
     private var videoNormRight = 1f
     private var videoNormBottom = 0.35f
+
+    private var lastPixelLeft = -1f
+    private var lastPixelTop = -1f
+    private var lastPixelRight = -1f
+    private var lastPixelBottom = -1f
 
     init {
         setWillNotDraw(false)
@@ -141,8 +146,14 @@ class AmbientBackdropView @JvmOverloads constructor(
      * Updates the video's layout position on screen to align spatial light projection.
      */
     fun updateVideoPosition(pixelLeft: Float, pixelTop: Float, pixelRight: Float, pixelBottom: Float) {
-        val w = width.toFloat().coerceAtLeast(1f)
-        val h = height.toFloat().coerceAtLeast(1f)
+        lastPixelLeft = pixelLeft
+        lastPixelTop = pixelTop
+        lastPixelRight = pixelRight
+        lastPixelBottom = pixelBottom
+
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
 
         videoNormLeft = (pixelLeft / w).coerceIn(0f, 1f)
         videoNormTop = (pixelTop / h).coerceIn(0f, 1f)
@@ -159,6 +170,9 @@ class AmbientBackdropView @JvmOverloads constructor(
             ambientShader?.updateResolution(w.toFloat(), h.toFloat())
             fallbackDstRect.set(0f, 0f, w.toFloat(), h.toFloat())
             updateBlurEffect()
+            if (lastPixelLeft >= 0f) {
+                updateVideoPosition(lastPixelLeft, lastPixelTop, lastPixelRight, lastPixelBottom)
+            }
         }
     }
 

@@ -64,7 +64,6 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -139,7 +138,7 @@ fun AmbientSandboxScreen() {
     var spreadLimit by remember { mutableFloatStateOf(0.55f) }
     var edgeSize by remember { mutableFloatStateOf(0.12f) }
     var brightness by remember { mutableFloatStateOf(1.0f) }
-    var vibrance by remember { mutableFloatStateOf(0.40f) }
+    var vibrance by remember { mutableFloatStateOf(0.0f) }
     var blurRadius by remember { mutableFloatStateOf(90f) }
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
@@ -484,16 +483,21 @@ fun FullscreenLandscapePlayer(
     ) {
         // LAYER 0: Ambient Backdrop fills the full landscape display (including letterbox/pillarbox bars)
         AndroidView(
-            factory = { backdropView },
+            factory = {
+                backdropView.apply {
+                    addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                        updateVideoCoordinates(textureView, backdropView)
+                    }
+                }
+            },
             modifier = Modifier.fillMaxSize()
         )
 
-        // LAYER 1: Centered 16:9 Video
+        // LAYER 1: Centered 16:9 Video (sitting seamlessly flush on the ambient backdrop)
         Box(
             modifier = Modifier
                 .aspectRatio(16f / 9f)
                 .align(Alignment.Center)
-                .shadow(16.dp, RoundedCornerShape(8.dp))
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black)
         ) {
@@ -625,7 +629,13 @@ fun PortraitSandboxView(
             ) {
                 // LAYER 0: Ambient Backdrop View matching the video + metadata stage
                 AndroidView(
-                    factory = { backdropView },
+                    factory = {
+                        backdropView.apply {
+                            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                                updateVideoCoordinates(textureView, backdropView)
+                            }
+                        }
+                    },
                     modifier = Modifier.matchParentSize()
                 )
 
@@ -636,12 +646,11 @@ fun PortraitSandboxView(
                     // Generous headroom above player so upward ambient glow rays are clearly visible
                     Spacer(modifier = Modifier.height(28.dp))
 
-                    // Video Player
+                    // Video Player (sitting seamlessly flush on the ambient backdrop without artificial elevation shadows)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 8.dp)
-                            .shadow(12.dp, shape = RoundedCornerShape(12.dp))
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color.Black)
                             .aspectRatio(16f / 9f)

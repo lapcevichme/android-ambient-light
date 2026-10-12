@@ -98,21 +98,25 @@ class AmbientShader {
             if (s <= 1.0) {
                 // Inside video bounds: direct radial video mapping
                 normVideoUV = p * 0.5 + 0.5;
-                float centerAttenuation = smoothstep(0.6, 1.0, s);
-                falloff = mix(0.15, 1.0, centerAttenuation);
+                float centerAttenuation = smoothstep(0.65, 1.0, s);
+                falloff = mix(0.20, 1.0, centerAttenuation);
             } else {
                 // Outside video bounds: Wessel Kroos perspective multiTexture projection
-                // Distance in discrete elevation steps from outer spread boundary toward center:
-                float2 clampedNorm = clamp(abs(normProjector), float2(0.0), float2(1.0));
-                float2 iUV = ((float2(1.0) - clampedNorm) * uScale) / uScaleStep;
-                float stepIndex = floor(min(iUV.x, iUV.y));
+                // 1. Exact continuous perimeter ray coordinates (seamless matching at the video edge):
+                float2 perimeterUV = (p / s) * 0.5 + 0.5;
 
-                // Concentric stepped scale level (creates signature elevation rings)
-                float2 currentScale = max(uScale - uScaleStep * stepIndex, float2(1.0));
+                // 2. Wessel Kroos stepped perspective projection:
+                float r = (abs(p.x) >= abs(p.y)) ? ratio.x : ratio.y;
+                float stepDist = (s - 1.0) / max(edge * r, 0.001);
+                float stepIndex = floor(stepDist);
 
-                // Project along radial ray from video center through fragment p:
-                float2 scaledUV = 0.5 * (p / currentScale);
-                normVideoUV = scaledUV + 0.5;
+                float currentScale = 1.0 + (stepIndex + 1.0) * edge * r;
+                float2 steppedUV = clamp((p / currentScale) * 0.5 + 0.5, float2(0.0), float2(1.0));
+
+                // Seamless transition: right at the edge (s -> 1.0), 100% perimeterUV ensures
+                // perfect color alignment with the video edge. Moving outward, it blends with steppedUV.
+                float edgeDist = clamp((s - 1.0) / max(edge * r, 0.001), 0.0, 1.0);
+                normVideoUV = mix(perimeterUV, steppedUV, edgeDist * 0.5);
 
                 // Distance falloff matching Wessel Kroos' projector-shadow.js
                 float maxDist = max(uScale.x - 1.0, 0.01);
@@ -160,7 +164,7 @@ class AmbientShader {
         updateCrop(CropBounds())
         updateSpreadLimit(0.4f)
         updateEdgeSize(0.12f)
-        updateVibrance(0.4f)
+        updateVibrance(0.0f)
         updateBrightness(1.0f)
     }
 
