@@ -74,6 +74,8 @@ import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
 import com.lapcevichme.ambientlight.ui.theme.AmbientLightTheme
 
+import androidx.compose.runtime.saveable.rememberSaveable
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,7 +111,7 @@ fun AmbientSandboxScreen() {
     var blurRadius by remember { mutableFloatStateOf(90f) }
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
-    var isFullscreen by remember { mutableStateOf(false) }
+    var isFullscreen by rememberSaveable { mutableStateOf(false) }
 
     // Playback state
     var playbackStatus by remember { mutableStateOf("Загрузка...") }
