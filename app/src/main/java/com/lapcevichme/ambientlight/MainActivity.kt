@@ -137,6 +137,7 @@ fun AmbientSandboxScreen() {
     // Ambient settings state
     var isEnabled by remember { mutableStateOf(true) }
     var spreadLimit by remember { mutableFloatStateOf(0.55f) }
+    var edgeSize by remember { mutableFloatStateOf(0.12f) }
     var brightness by remember { mutableFloatStateOf(1.0f) }
     var vibrance by remember { mutableFloatStateOf(0.40f) }
     var blurRadius by remember { mutableFloatStateOf(90f) }
@@ -248,6 +249,7 @@ fun AmbientSandboxScreen() {
     // Sync ambient backdrop parameters
     backdropView.isAmbientEnabled = isEnabled
     backdropView.spreadLimit = spreadLimit
+    backdropView.edgeSize = edgeSize
     backdropView.brightness = brightness
     backdropView.vibrance = vibrance
     backdropView.blurRadius = blurRadius
@@ -273,6 +275,8 @@ fun AmbientSandboxScreen() {
             onEnabledChange = { isEnabled = it },
             spreadLimit = spreadLimit,
             onSpreadLimitChange = { spreadLimit = it },
+            edgeSize = edgeSize,
+            onEdgeSizeChange = { edgeSize = it },
             brightness = brightness,
             onBrightnessChange = { brightness = it },
             vibrance = vibrance,
@@ -584,6 +588,8 @@ fun PortraitSandboxView(
     onEnabledChange: (Boolean) -> Unit,
     spreadLimit: Float,
     onSpreadLimitChange: (Float) -> Unit,
+    edgeSize: Float,
+    onEdgeSizeChange: (Float) -> Unit,
     brightness: Float,
     onBrightnessChange: (Float) -> Unit,
     vibrance: Float,
@@ -694,6 +700,8 @@ fun PortraitSandboxView(
                 onEnabledChange = onEnabledChange,
                 spreadLimit = spreadLimit,
                 onSpreadLimitChange = onSpreadLimitChange,
+                edgeSize = edgeSize,
+                onEdgeSizeChange = onEdgeSizeChange,
                 brightness = brightness,
                 onBrightnessChange = onBrightnessChange,
                 vibrance = vibrance,
@@ -844,6 +852,8 @@ fun AmbientControlPanel(
     onEnabledChange: (Boolean) -> Unit,
     spreadLimit: Float,
     onSpreadLimitChange: (Float) -> Unit,
+    edgeSize: Float,
+    onEdgeSizeChange: (Float) -> Unit,
     brightness: Float,
     onBrightnessChange: (Float) -> Unit,
     vibrance: Float,
@@ -936,12 +946,21 @@ fun AmbientControlPanel(
                 enabled = isEnabled
             )
 
-            // Blur Radius Slider
+            // Edge Size (Elevation Steps) Slider
+            Text("Ступени слоев / elevation (Edge): ${(edgeSize * 100).toInt()}%", color = Color.White, fontSize = 12.sp)
+            Slider(
+                value = edgeSize,
+                onValueChange = onEdgeSizeChange,
+                valueRange = 0.03f..0.30f,
+                enabled = isEnabled
+            )
+
+            // Blur Radius Slider (0 dp allows inspecting crisp contextual rays & elevation steps)
             Text("Мягкость размытия (Blur): ${blurRadius.toInt()} dp", color = Color.White, fontSize = 12.sp)
             Slider(
                 value = blurRadius,
                 onValueChange = onBlurRadiusChange,
-                valueRange = 15f..160f,
+                valueRange = 0f..160f,
                 enabled = isEnabled
             )
 

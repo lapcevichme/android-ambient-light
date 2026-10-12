@@ -57,6 +57,16 @@ class AmbientBackdropView @JvmOverloads constructor(
             postInvalidateOnAnimation()
         }
 
+    /**
+     * Discrete elevation step thickness (Wessel Kroos edge size): 0.05..0.30.
+     */
+    var edgeSize: Float = 0.12f
+        set(value) {
+            field = value
+            ambientShader?.updateEdgeSize(value)
+            postInvalidateOnAnimation()
+        }
+
     var brightness: Float = 1.0f
         set(value) {
             field = value
@@ -106,6 +116,7 @@ class AmbientBackdropView @JvmOverloads constructor(
             val shader = AmbientShader()
             ambientShader = shader
             shader.updateSpreadLimit(spreadLimit)
+            shader.updateEdgeSize(edgeSize)
             shader.updateBrightness(brightness)
             shader.updateVibrance(vibrance)
             shader.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)

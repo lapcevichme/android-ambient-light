@@ -31,6 +31,7 @@ class AmbientShader {
         uniform float2 uCropOffset;
         uniform float2 uCropScale;
         uniform float uSpreadLimit;
+        uniform float uEdgeSize;
         uniform float uVibrance;
         uniform float uBrightness;
 
@@ -67,12 +68,64 @@ class AmbientShader {
         half4 main(float2 fragCoord) {
             float2 uv = fragCoord / uResolution;
 
-            // Clamp coordinate to the video perimeter to expand border colors outward
-            float2 clampedUV = clamp(uv, uVideoRect.xy, uVideoRect.zw);
+            // Video center and half-size in backdrop coordinates [0, 1]
+            float2 videoCenter = (uVideoRect.xy + uVideoRect.zw) * 0.5;
+            float2 videoHalfSize = max((uVideoRect.zw - uVideoRect.xy) * 0.5, float2(0.001));
 
-            // Normalized coordinates inside the video [0, 1]
-            float2 videoSize = max(uVideoRect.zw - uVideoRect.xy, float2(0.001));
-            float2 normVideoUV = (clampedUV - uVideoRect.xy) / videoSize;
+            // Fragment vector from video center normalized by video half-size
+            // At video perimeter, max(abs(p.x), abs(p.y)) == 1.0
+            float2 p = (uv - videoCenter) / videoHalfSize;
+            float s = max(abs(p.x), abs(p.y));
+
+            // Uniform isotropic projection: scale vertical ratio by video aspect ratio (e.g. 16/9)
+            // so physical ray length is uniform across all directions
+            float aspect = videoHalfSize.x / videoHalfSize.y;
+            float2 ratio = float2(1.0, aspect);
+
+            // Maximum expansion scale and discrete elevation step
+            float spread = max(uSpreadLimit, 0.01);
+            float2 uScale = float2(1.0) + spread * 2.2 * ratio;
+            float edge = max(uEdgeSize, 0.02);
+            float2 uScaleStep = edge * ratio;
+
+            // Projector normalized coordinates in [-1, 1]
+            float2 normProjector = p / uScale;
+
+            // Sample coordinates and elevation step calculation:
+            float2 normVideoUV;
+            float falloff = 0.0;
+
+            if (s <= 1.0) {
+                // Inside video bounds: direct radial video mapping
+                normVideoUV = p * 0.5 + 0.5;
+                float centerAttenuation = smoothstep(0.6, 1.0, s);
+                falloff = mix(0.15, 1.0, centerAttenuation);
+            } else {
+                // Outside video bounds: Wessel Kroos perspective multiTexture projection
+                // Distance in discrete elevation steps from outer spread boundary toward center:
+                float2 clampedNorm = clamp(abs(normProjector), float2(0.0), float2(1.0));
+                float2 iUV = ((float2(1.0) - clampedNorm) * uScale) / uScaleStep;
+                float stepIndex = floor(min(iUV.x, iUV.y));
+
+                // Concentric stepped scale level (creates signature elevation rings)
+                float2 currentScale = max(uScale - uScaleStep * stepIndex, float2(1.0));
+
+                // Project along radial ray from video center through fragment p:
+                float2 scaledUV = 0.5 * (p / currentScale);
+                normVideoUV = scaledUV + 0.5;
+
+                // Distance falloff matching Wessel Kroos' projector-shadow.js
+                float maxDist = max(uScale.x - 1.0, 0.01);
+                float dist = (s - 1.0) / maxDist;
+
+                if (dist < 1.0) {
+                    float fadeStart = 0.15;
+                    float easing = 16.0 / (35.0 * 0.64); // ~0.714
+                    float fadeProgress = clamp((dist - fadeStart) / max(1.0 - fadeStart, 0.001), 0.0, 1.0);
+                    float shadowAlpha = pow(fadeProgress, easing);
+                    falloff = 1.0 - shadowAlpha;
+                }
+            }
 
             // Apply letterbox crop compensation
             float2 croppedUV = uCropOffset + (normVideoUV * uCropScale);
@@ -88,20 +141,7 @@ class AmbientShader {
                 color.rgb = half3(hsv2rgb(hsv));
             }
 
-            // Aspect-ratio normalized Euclidean distance from video bounds
-            float2 d = max(float2(0.0), max(uVideoRect.xy - uv, uv - uVideoRect.zw));
-            float aspect = uResolution.x / max(uResolution.y, 1.0);
-            float dist = length(float2(d.x, d.y / aspect));
-
-            // Radial falloff: light emanates from perimeter and softly dissolves outward
-            float spread = max(uSpreadLimit, 0.01);
-            float falloff = 1.0 - smoothstep(0.0, spread, dist);
-
-            // Dim center under the video to prevent duplicate player rendering
-            float centerAttenuation = smoothstep(0.0, 0.05, dist);
-            float edgeFactor = mix(0.25, 1.0, centerAttenuation);
-
-            float intensity = falloff * edgeFactor * uBrightness;
+            float intensity = falloff * uBrightness;
 
             // Output premultiplied alpha color for proper Skia blending
             return half4(color.rgb * intensity, intensity);
@@ -119,6 +159,7 @@ class AmbientShader {
         updateVideoRect(0.1f, 0.1f, 0.9f, 0.5f)
         updateCrop(CropBounds())
         updateSpreadLimit(0.4f)
+        updateEdgeSize(0.12f)
         updateVibrance(0.4f)
         updateBrightness(1.0f)
     }
@@ -149,6 +190,10 @@ class AmbientShader {
 
     fun updateSpreadLimit(limit: Float) {
         runtimeShader.setFloatUniform("uSpreadLimit", limit)
+    }
+
+    fun updateEdgeSize(edgeSize: Float) {
+        runtimeShader.setFloatUniform("uEdgeSize", edgeSize)
     }
 
     fun updateVibrance(vibrance: Float) {
