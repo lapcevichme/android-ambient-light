@@ -82,16 +82,10 @@ class AmbientShader {
             float aspect = videoHalfSize.x / videoHalfSize.y;
             float2 ratio = float2(1.0, aspect);
 
-            // Maximum expansion scale and discrete elevation step
+            // Maximum expansion scale
             float spread = max(uSpreadLimit, 0.01);
-            float2 uScale = float2(1.0) + spread * 2.2 * ratio;
-            float edge = max(uEdgeSize, 0.02);
-            float2 uScaleStep = edge * ratio;
 
-            // Projector normalized coordinates in [-1, 1]
-            float2 normProjector = p / uScale;
-
-            // Sample coordinates and elevation step calculation:
+            // Sample coordinates and falloff:
             float2 normVideoUV;
             float falloff = 0.0;
 
@@ -100,18 +94,12 @@ class AmbientShader {
                 normVideoUV = p * 0.5 + 0.5;
                 falloff = 1.0;
             } else {
-                // Outside video bounds: Wessel Kroos stepped perspective multiTexture projection
-                float2 absP = abs(p);
-                float2 iUV = (uScale - absP) / uScaleStep;
-                float2 maxI = floor(max((uScale - float2(1.0)) / uScaleStep, float2(0.0)));
-                float impreciseI = clamp(floor(min(iUV.x, iUV.y)), 0.0, min(maxI.x, maxI.y));
-
-                float2 denom = max(uScale - uScaleStep * impreciseI, float2(1.0));
-                float2 sampleP = p / denom;
-                normVideoUV = clamp(sampleP * 0.5 + 0.5, float2(0.0), float2(1.0));
+                // Outside video bounds: pure continuous radial projection from video center
+                // Rays radiate cleanly and continuously outward through the video perimeter, exactly like the original extension
+                normVideoUV = (p / s) * 0.5 + 0.5;
 
                 // Isotropic distance falloff matching Wessel Kroos' projector-shadow.js
-                float r = (absP.x >= absP.y) ? ratio.x : ratio.y;
+                float r = (abs(p.x) >= abs(p.y)) ? ratio.x : ratio.y;
                 float maxDist = max(spread * 2.2 * r, 0.01);
                 float dist = (s - 1.0) / maxDist;
 

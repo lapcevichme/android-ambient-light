@@ -81,7 +81,7 @@ class AmbientBackdropView @JvmOverloads constructor(
             postInvalidateOnAnimation()
         }
 
-    var blurRadius: Float = 22f
+    var blurRadius: Float = 50f
         set(value) {
             field = value
             updateBlurEffect()

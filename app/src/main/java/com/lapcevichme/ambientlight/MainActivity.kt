@@ -139,7 +139,7 @@ fun AmbientSandboxScreen() {
     var edgeSize by remember { mutableFloatStateOf(0.12f) }
     var brightness by remember { mutableFloatStateOf(1.0f) }
     var vibrance by remember { mutableFloatStateOf(0.0f) }
-    var blurRadius by remember { mutableFloatStateOf(22f) }
+    var blurRadius by remember { mutableFloatStateOf(50f) }
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
     var customVideoUri by remember { mutableStateOf<Uri?>(null) }
@@ -180,7 +180,7 @@ fun AmbientSandboxScreen() {
     // Shared Views & Buffers attached to the player stage
     val backdropView = remember { AmbientBackdropView(context) }
     val textureView = remember { InterceptingTextureView(context) }
-    val frameBufferBitmap = remember { Bitmap.createBitmap(32, 18, Bitmap.Config.ARGB_8888) }
+    val frameBufferBitmap = remember { Bitmap.createBitmap(128, 72, Bitmap.Config.ARGB_8888) }
 
     // Handle Orientation and System Bars for Fullscreen
     DisposableEffect(isFullscreen) {
@@ -959,21 +959,12 @@ fun AmbientControlPanel(
                 enabled = isEnabled
             )
 
-            // Edge Size (Elevation Steps) Slider
-            Text("Ступени слоев / elevation (Edge): ${(edgeSize * 100).toInt()}%", color = Color.White, fontSize = 12.sp)
-            Slider(
-                value = edgeSize,
-                onValueChange = onEdgeSizeChange,
-                valueRange = 0.03f..0.30f,
-                enabled = isEnabled
-            )
-
-            // Blur Radius Slider (0 dp allows inspecting crisp contextual rays & elevation steps)
+            // Blur Radius Slider (0 dp allows inspecting pure rays from center)
             Text("Мягкость размытия (Blur): ${blurRadius.toInt()} dp", color = Color.White, fontSize = 12.sp)
             Slider(
                 value = blurRadius,
                 onValueChange = onBlurRadiusChange,
-                valueRange = 0f..80f,
+                valueRange = 0f..120f,
                 enabled = isEnabled
             )
 
