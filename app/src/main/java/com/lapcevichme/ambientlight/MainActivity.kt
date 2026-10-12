@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -45,20 +46,21 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -175,9 +177,6 @@ fun AmbientSandboxScreen() {
         }
     }
 
-    // Dynamic dominant ambient color (for UI outline shadow tinting)
-    var dominantColor by remember { mutableStateOf(Color(0xFF333333)) }
-
     // Shared Views & Buffers attached to the player stage
     val backdropView = remember { AmbientBackdropView(context) }
     val textureView = remember { InterceptingTextureView(context) }
@@ -237,8 +236,7 @@ fun AmbientSandboxScreen() {
         }
         exoPlayer.setVideoTextureView(textureView)
 
-        backdropView.onDominantColorListener = { rgb ->
-            dominantColor = Color(rgb)
+        backdropView.onDominantColorListener = { _ ->
             framesCount = backdropView.framesProcessed
         }
 
@@ -259,7 +257,7 @@ fun AmbientSandboxScreen() {
         FullscreenLandscapePlayer(
             backdropView = backdropView,
             textureView = textureView,
-            dominantColor = dominantColor,
+            exoPlayer = exoPlayer,
             videoTitle = activeVideoTitle,
             isEnabled = isEnabled,
             onToggleEnabled = { isEnabled = it },
@@ -269,7 +267,7 @@ fun AmbientSandboxScreen() {
         PortraitSandboxView(
             backdropView = backdropView,
             textureView = textureView,
-            dominantColor = dominantColor,
+            exoPlayer = exoPlayer,
             activeVideoTitle = activeVideoTitle,
             isEnabled = isEnabled,
             onEnabledChange = { isEnabled = it },
@@ -306,11 +304,163 @@ fun AmbientSandboxScreen() {
     }
 }
 
+private fun formatTimeMs(millis: Long): String {
+    if (millis <= 0L) return "0:00"
+    val totalSeconds = (millis / 1000).coerceAtLeast(0L)
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
+    }
+}
+
+@Composable
+fun VideoPlayerControls(
+    exoPlayer: ExoPlayer,
+    modifier: Modifier = Modifier,
+    onEnterFullscreen: (() -> Unit)? = null
+) {
+    var isPlaying by remember { mutableStateOf(exoPlayer.isPlaying) }
+    var currentPositionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    var isScrubbing by remember { mutableStateOf(false) }
+    var scrubPositionMs by remember { mutableFloatStateOf(0f) }
+    var showControls by remember { mutableStateOf(true) }
+
+    // Auto-hide controls after 3.5 seconds of playback
+    LaunchedEffect(showControls, isPlaying, isScrubbing) {
+        if (showControls && isPlaying && !isScrubbing) {
+            delay(3500)
+            showControls = false
+        }
+    }
+
+    // Continual position tracker
+    LaunchedEffect(exoPlayer) {
+        while (true) {
+            if (!isScrubbing) {
+                currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+                durationMs = exoPlayer.duration.coerceAtLeast(0L)
+            }
+            isPlaying = exoPlayer.isPlaying
+            delay(200)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clickable { showControls = !showControls }
+    ) {
+        AnimatedVisibility(
+            visible = showControls,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x55000000))
+            ) {
+                // Center: Play / Pause Button
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0x99000000),
+                    modifier = Modifier
+                        .size(52.dp)
+                        .align(Alignment.Center)
+                        .clickable {
+                            if (exoPlayer.isPlaying) {
+                                exoPlayer.pause()
+                                isPlaying = false
+                            } else {
+                                exoPlayer.play()
+                                isPlaying = true
+                            }
+                        }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (isPlaying) "⏸" else "▶",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Bottom: Time labels + Scrubber slider + Fullscreen toggle
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    val displayCurrent = if (isScrubbing) scrubPositionMs.toLong() else currentPositionMs
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${formatTimeMs(displayCurrent)} / ${formatTimeMs(durationMs)}",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        if (onEnterFullscreen != null) {
+                            Button(
+                                onClick = onEnterFullscreen,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0x66000000)),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(28.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text("⛶", fontSize = 13.sp, color = Color.White)
+                            }
+                        }
+                    }
+
+                    val maxSlider = durationMs.coerceAtLeast(1L).toFloat()
+                    val sliderVal = if (isScrubbing) scrubPositionMs else currentPositionMs.toFloat()
+                    Slider(
+                        value = sliderVal.coerceIn(0f, maxSlider),
+                        onValueChange = {
+                            isScrubbing = true
+                            scrubPositionMs = it
+                        },
+                        onValueChangeFinished = {
+                            exoPlayer.seekTo(scrubPositionMs.toLong())
+                            isScrubbing = false
+                        },
+                        valueRange = 0f..maxSlider,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFFFF0000), // YouTube red accent
+                            activeTrackColor = Color(0xFFFF0000),
+                            inactiveTrackColor = Color(0x55FFFFFF)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(26.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun FullscreenLandscapePlayer(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
-    dominantColor: Color,
+    exoPlayer: ExoPlayer,
     videoTitle: String,
     isEnabled: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
@@ -339,11 +489,9 @@ fun FullscreenLandscapePlayer(
             modifier = Modifier
                 .aspectRatio(16f / 9f)
                 .align(Alignment.Center)
-                .shadow(
-                    elevation = 16.dp,
-                    ambientColor = dominantColor,
-                    spotColor = dominantColor
-                )
+                .shadow(16.dp, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black)
         ) {
             AndroidView(
                 factory = {
@@ -355,9 +503,15 @@ fun FullscreenLandscapePlayer(
                 },
                 modifier = Modifier.fillMaxSize()
             )
+
+            // Overlaid controls with Scrubber and Play/Pause
+            VideoPlayerControls(
+                exoPlayer = exoPlayer,
+                onEnterFullscreen = null
+            )
         }
 
-        // Overlay Controls
+        // Overlay Navigation Controls
         AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(),
@@ -424,7 +578,7 @@ fun FullscreenLandscapePlayer(
 fun PortraitSandboxView(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
-    dominantColor: Color,
+    exoPlayer: ExoPlayer,
     activeVideoTitle: String,
     isEnabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
@@ -448,21 +602,6 @@ fun PortraitSandboxView(
     framesCount: Long
 ) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Ambient Light for YouTube",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0F0F0F),
-                    titleContentColor = Color.White
-                )
-            )
-        },
         containerColor = Color(0xFF0F0F0F)
     ) { innerPadding ->
         Column(
@@ -488,19 +627,18 @@ fun PortraitSandboxView(
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    // Generous headroom above player so upward ambient glow rays are clearly visible
+                    Spacer(modifier = Modifier.height(28.dp))
+
                     // Video Player
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .shadow(12.dp, shape = RoundedCornerShape(12.dp))
                             .clip(RoundedCornerShape(12.dp))
+                            .background(Color.Black)
                             .aspectRatio(16f / 9f)
-                            .shadow(
-                                elevation = 12.dp,
-                                shape = RoundedCornerShape(12.dp),
-                                ambientColor = dominantColor,
-                                spotColor = dominantColor
-                            )
                     ) {
                         AndroidView(
                             factory = {
@@ -513,18 +651,11 @@ fun PortraitSandboxView(
                             modifier = Modifier.fillMaxSize()
                         )
 
-                        // Fullscreen trigger button overlay on video
-                        Button(
-                            onClick = onEnterFullscreen,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0x88000000)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp)
-                                .height(32.dp)
-                        ) {
-                            Text("⛶ Во весь экран", fontSize = 11.sp, color = Color.White)
-                        }
+                        // Overlaid controls with Scrubber, Play/Pause, and Fullscreen toggle
+                        VideoPlayerControls(
+                            exoPlayer = exoPlayer,
+                            onEnterFullscreen = onEnterFullscreen
+                        )
                     }
 
                     // Playback status or error indicator
@@ -546,12 +677,11 @@ fun PortraitSandboxView(
                         }
                     }
 
-                    // Mock YouTube Interface with Dynamic Ambient Shadows
+                    // Mock YouTube Interface with Translucent Frosted Glass UI (Physically lit by AGSL backdrop)
                     MockYouTubeContent(
                         title = activeVideoTitle,
                         statusText = playbackStatus,
-                        framesCount = framesCount,
-                        ambientShadowColor = dominantColor
+                        framesCount = framesCount
                     )
                 }
             }
@@ -603,8 +733,7 @@ private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdro
 fun MockYouTubeContent(
     title: String,
     statusText: String = "Воспроизведение",
-    framesCount: Long = 0L,
-    ambientShadowColor: Color
+    framesCount: Long = 0L
 ) {
     Column(
         modifier = Modifier
@@ -628,16 +757,9 @@ fun MockYouTubeContent(
         // Channel Info Row with Frosted Background
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = Color(0x33222222),
-            border = BorderStroke(1.dp, Color(0x22FFFFFF)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = 6.dp,
-                    shape = RoundedCornerShape(12.dp),
-                    ambientColor = ambientShadowColor,
-                    spotColor = ambientShadowColor
-                )
+            color = Color(0x18FFFFFF),
+            border = BorderStroke(1.dp, Color(0x1EFFFFFF)),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
@@ -672,7 +794,7 @@ fun MockYouTubeContent(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Action Buttons Row with Frosted Glass Chips & Dynamic Ambient Shadows
+        // Action Buttons Row with Frosted Glass Chips
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -680,16 +802,9 @@ fun MockYouTubeContent(
             listOf("142 тыс.", "Поделиться", "Ремикс", "Скачать").forEach { label ->
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = Color(0x33282828),
-                    border = BorderStroke(1.dp, Color(0x22FFFFFF)),
-                    modifier = Modifier
-                        .shadow(
-                            elevation = 8.dp,
-                            shape = RoundedCornerShape(20.dp),
-                            ambientColor = ambientShadowColor,
-                            spotColor = ambientShadowColor
-                        )
-                        .height(36.dp)
+                    color = Color(0x14FFFFFF),
+                    border = BorderStroke(1.dp, Color(0x1EFFFFFF)),
+                    modifier = Modifier.height(36.dp)
                 ) {
                     Box(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -706,16 +821,9 @@ fun MockYouTubeContent(
         // Comments Preview Card with Frosted Glass Look
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0x33202020)),
-            border = BorderStroke(1.dp, Color(0x22FFFFFF)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = 8.dp,
-                    shape = RoundedCornerShape(12.dp),
-                    ambientColor = ambientShadowColor,
-                    spotColor = ambientShadowColor
-                )
+            colors = CardDefaults.cardColors(containerColor = Color(0x14FFFFFF)),
+            border = BorderStroke(1.dp, Color(0x1EFFFFFF)),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text("Комментарии • 4,8 тыс.", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
