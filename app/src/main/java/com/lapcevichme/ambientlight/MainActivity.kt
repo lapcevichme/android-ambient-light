@@ -18,7 +18,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,11 +44,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -68,9 +79,17 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -651,12 +670,12 @@ fun PortraitSandboxView(
                     Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Video Player (sitting seamlessly flush on the ambient backdrop without artificial elevation shadows)
+                    // Video Player (sharp square corners with padding, ambient light shining from all 4 sides)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(0.dp))
                             .background(Color.Black)
                             .aspectRatio(16f / 9f)
                     ) {
@@ -705,6 +724,9 @@ fun PortraitSandboxView(
                     )
                 }
             }
+
+            // Suggested Videos Feed (Kurzgesagt, DECO*27 matching YouTube screenshot)
+            SuggestedVideosFeed()
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -761,103 +783,446 @@ fun MockYouTubeContent(
     statusText: String = "Воспроизведение",
     framesCount: Long = 0L
 ) {
+    val displayTitle = if (title.startsWith("sample_") || title == "Оффлайн демо (Цвета + Letterbox)") {
+        "The Most Controversial Idea In Physics"
+    } else {
+        title
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
+        // Video Title (matching YouTube screenshot)
         Text(
-            text = title,
+            text = displayTitle,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = Color.White,
+            lineHeight = 24.sp
         )
-        Text(
-            text = "Статус: $statusText • Обработано кадров: $framesCount",
-            fontSize = 12.sp,
-            color = Color(0xFFCCCCCC)
-        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Metadata line: @SciencePetr 52 тыс. отметок "Нравится" 2,3 млн просмотров ещё
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = Color(0xFFDDDDDD), fontWeight = FontWeight.Medium)) {
+                        append("@SciencePetr  ")
+                    }
+                    withStyle(SpanStyle(color = Color(0xFFAAAAAA))) {
+                        append("52 тыс. отметок \"Нравится\"  2,3 млн просмотров  ")
+                    }
+                    withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) {
+                        append("ещё")
+                    }
+                },
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Channel Info & Actions Row: Avatar + Subscribe pill + Action icon buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Channel Avatar
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(Color(0xFF8D6E63), Color(0xFF4E342E))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "SP",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Subscribe Button
+            Button(
+                onClick = {},
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color.Black
+                ),
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Text(
+                    text = "Подписаться",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Action Icons Row: Like, Dislike, Share, Save, More
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.ThumbUp,
+                        contentDescription = "Нравится",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.ThumbDown,
+                        contentDescription = "Не нравится",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = "Поделиться",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.BookmarkBorder,
+                        contentDescription = "Сохранить",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.MoreHoriz,
+                        contentDescription = "Ещё",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Channel Info Row with Frosted Background
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = Color(0x18FFFFFF),
-            border = BorderStroke(1.dp, Color(0x1EFFFFFF)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFE50914)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("YT", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Ambient Project Studio", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    Text("1.42 млн подписчиков", color = Color(0xFFAAAAAA), fontSize = 11.sp)
-                }
-                Button(
-                    onClick = {},
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.height(34.dp)
-                ) {
-                    Text("Подписаться", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Action Buttons Row with Frosted Glass Chips
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("142 тыс.", "Поделиться", "Ремикс", "Скачать").forEach { label ->
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0x14FFFFFF),
-                    border = BorderStroke(1.dp, Color(0x1EFFFFFF)),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Comments Preview Card with Frosted Glass Look
+        // Comments Preview Card (Translucent frosted card, physically lit by ambient light)
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0x14FFFFFF)),
-            border = BorderStroke(1.dp, Color(0x1EFFFFFF)),
+            colors = CardDefaults.cardColors(containerColor = Color(0x22FFFFFF)),
+            border = BorderStroke(1.dp, Color(0x18FFFFFF)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text("Комментарии • 4,8 тыс.", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(6.dp))
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Комментарии",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "5 тыс.",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 12.dp, height = 4.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFDDDDDD))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(width = 4.dp, height = 4.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x66FFFFFF))
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFB8860B)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("💻", fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "I was hooked, wondering why this style felt so familiar.. now come to find you're an ex-veritasium writer! I'm looking...",
+                        color = Color(0xFFEEEEEE),
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SuggestedVideosFeed(
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+    ) {
+        // --- Kurzgesagt Video Card ---
+        // 16:9 Thumbnail: "WE LOST CONTROL"
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .background(Color(0xFF1A1A1A))
+        ) {
+            // Stylized graphic matching the screenshot thumbnail
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val center = Offset(w * 0.5f, h * 0.55f)
+
+                // Background radial glow
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFFFFDD00), Color(0xFFFF5722), Color(0xFF880E4F), Color(0xFF0F051D)),
+                        center = center,
+                        radius = w * 0.6f
+                    )
+                )
+
+                // Dramatic sunburst rays around eye
+                val rayCount = 28
+                for (i in 0 until rayCount) {
+                    val angle = (i.toFloat() / rayCount) * (2f * Math.PI.toFloat())
+                    val r1 = w * 0.18f
+                    val r2 = if (i % 2 == 0) w * 0.35f else w * 0.28f
+                    val x1 = center.x + kotlin.math.cos(angle) * r1
+                    val y1 = center.y + kotlin.math.sin(angle) * r1
+                    val x2 = center.x + kotlin.math.cos(angle) * r2
+                    val y2 = center.y + kotlin.math.sin(angle) * r2
+                    drawLine(
+                        color = if (i % 3 == 0) Color(0xFF00E5FF) else Color(0xFFFFEB3B),
+                        start = Offset(x1, y1),
+                        end = Offset(x2, y2),
+                        strokeWidth = 3f
+                    )
+                }
+
+                // Eye outer ring
+                drawCircle(
+                    color = Color(0xFFD50000),
+                    radius = w * 0.17f,
+                    center = center
+                )
+
+                // Eye inner ring / iris
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFFFF8A80), Color(0xFFD50000), Color(0xFF000000)),
+                        center = center,
+                        radius = w * 0.15f
+                    ),
+                    radius = w * 0.14f,
+                    center = center
+                )
+
+                // Pupil (vertical slit)
+                drawOval(
+                    color = Color.Black,
+                    topLeft = Offset(center.x - w * 0.025f, center.y - h * 0.16f),
+                    size = Size(w * 0.05f, h * 0.32f)
+                )
+
+                // Pupil center slit glow
+                drawOval(
+                    color = Color(0xFFFF1744),
+                    topLeft = Offset(center.x - w * 0.008f, center.y - h * 0.12f),
+                    size = Size(w * 0.016f, h * 0.24f)
+                )
+
+                // White reflection highlight
+                drawOval(
+                    color = Color.White,
+                    topLeft = Offset(center.x - w * 0.08f, center.y - h * 0.13f),
+                    size = Size(w * 0.045f, h * 0.07f)
+                )
+            }
+
+            // Bold Headline "WE LOST CONTROL" across top of thumbnail
+            Text(
+                text = "WE LOST CONTROL",
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+            )
+
+            // Duration badge in bottom right ("21:44")
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = Color(0xDD000000),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+            ) {
                 Text(
-                    "Свечение исходит строго из-под кромок плеера, освещая интерфейс вокруг и скроллясь вместе с ним!",
+                    text = "21:44",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+        }
+
+        // Kurzgesagt Channel info & title row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Kurzgesagt Earth avatar
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF0D47A1)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🌍", fontSize = 16.sp)
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "AI Just Crossed the Terrifying Line - Now What?",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    lineHeight = 18.sp,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Kurzgesagt – In a Nutshell  ▷18 млн  7 дн. назад",
+                    color = Color(0xFFAAAAAA),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Опции",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // --- DECO*27 Card Snippet ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF212121))
+                    .border(BorderStroke(1.dp, Color(0xFF444444)), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("27", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "DECO*27",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("♪", color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("5 дней назад", color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "かわいいデコミクたちのPOP UP PARADEが...",
                     color = Color(0xFFDDDDDD),
-                    fontSize = 12.sp
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Опции",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
