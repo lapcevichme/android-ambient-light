@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
@@ -15,8 +17,10 @@ import androidx.annotation.RequiresApi
 /**
  * Custom View rendering the dynamic ambient lighting glow beneath the player.
  *
- * Utilizes AGSL RuntimeShader for geometry transformation and color tuning,
+ * Primary mode (Android 13+): AGSL RuntimeShader for geometry transformation and color tuning,
  * with Skia hardware-accelerated RenderEffect blur for the soft dispersion aura.
+ *
+ * Fallback mode (Android 9-12): Hardware scaled bitmap drawing with RenderEffect (API 31+) or bilinear filtering.
  */
 class AmbientBackdropView @JvmOverloads constructor(
     context: Context,
@@ -27,35 +31,43 @@ class AmbientBackdropView @JvmOverloads constructor(
     private val letterboxDetector = LetterboxDetector()
     private val temporalSmoother = TemporalSmoother()
     private var ambientShader: AmbientShader? = null
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val shaderPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+    // Fallback drawing structures
+    private var lastFrameBitmap: Bitmap? = null
+    private val fallbackSrcRect = Rect()
+    private val fallbackDstRect = RectF()
+    private val fallbackPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     private var hasValidFrame = false
+    var framesProcessed: Long = 0
+        private set
 
     var isAmbientEnabled: Boolean = true
         set(value) {
             field = value
-            invalidate()
+            postInvalidateOnAnimation()
         }
 
     var spread: Float = 1.35f
         set(value) {
             field = value
             ambientShader?.updateSpread(value)
-            invalidate()
+            postInvalidateOnAnimation()
         }
 
     var vibrance: Float = 0.25f
         set(value) {
             field = value
             ambientShader?.updateVibrance(value)
-            invalidate()
+            postInvalidateOnAnimation()
         }
 
     var blurRadius: Float = 80f
         set(value) {
             field = value
             updateBlurEffect()
-            invalidate()
+            postInvalidateOnAnimation()
         }
 
     var flickerReduction: Int
@@ -67,21 +79,25 @@ class AmbientBackdropView @JvmOverloads constructor(
     var onDominantColorListener: ((Int) -> Unit)? = null
 
     init {
-        // RenderNode hardware acceleration required for RenderEffect and RuntimeShader
         setWillNotDraw(false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             initShader()
         }
+        updateBlurEffect()
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun initShader() {
-        val shader = AmbientShader()
-        ambientShader = shader
-        shader.updateSpread(spread)
-        shader.updateVibrance(vibrance)
-        paint.shader = shader.runtimeShader
-        updateBlurEffect()
+        try {
+            val shader = AmbientShader()
+            ambientShader = shader
+            shader.updateSpread(spread)
+            shader.updateVibrance(vibrance)
+            shaderPaint.shader = shader.runtimeShader
+        } catch (e: Throwable) {
+            // WORKAROUND: Fall back to scaled bitmap path if GPU driver fails AGSL compilation
+            ambientShader = null
+        }
     }
 
     private fun updateBlurEffect() {
@@ -98,6 +114,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && h > 0) {
             ambientShader?.updateResolution(w.toFloat(), h.toFloat())
+            fallbackDstRect.set(0f, 0f, w.toFloat(), h.toFloat())
             updateBlurEffect()
         }
     }
@@ -110,16 +127,24 @@ class AmbientBackdropView @JvmOverloads constructor(
 
         val crop = letterboxDetector.detect(rawFrame)
         val smoothed = temporalSmoother.smooth(rawFrame)
+        framesProcessed++
 
-        ambientShader?.let { shader ->
+        val shader = ambientShader
+        if (shader != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             shader.updateCrop(crop)
             shader.updateTexture(smoothed)
             hasValidFrame = true
-            invalidate()
+        } else {
+            // Fallback path: copy bitmap reference for direct canvas scaling
+            lastFrameBitmap = smoothed
+            fallbackSrcRect.set(0, 0, smoothed.width, smoothed.height)
+            hasValidFrame = true
         }
 
         // Extract average ambient color for UI elevation shadow tints
         computeAverageColor(smoothed)
+
+        postInvalidateOnAnimation()
     }
 
     private fun computeAverageColor(bitmap: Bitmap) {
@@ -150,8 +175,17 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (isAmbientEnabled && hasValidFrame && ambientShader != null) {
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        if (!isAmbientEnabled || !hasValidFrame) return
+
+        val shader = ambientShader
+        if (shader != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), shaderPaint)
+        } else {
+            val bitmap = lastFrameBitmap
+            if (bitmap != null && !bitmap.isRecycled) {
+                fallbackDstRect.set(0f, 0f, width.toFloat(), height.toFloat())
+                canvas.drawBitmap(bitmap, fallbackSrcRect, fallbackDstRect, fallbackPaint)
+            }
         }
     }
 }

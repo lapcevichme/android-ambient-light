@@ -98,6 +98,8 @@ fun AmbientSandboxScreen() {
     var playbackStatus by remember { mutableStateOf("Загрузка...") }
     var playbackError by remember { mutableStateOf<String?>(null) }
 
+    var framesCount by remember { mutableStateOf(0L) }
+
     // Dynamic dominant ambient color (for UI outline shadow tinting)
     var dominantColor by remember { mutableStateOf(Color(0xFF222222)) }
 
@@ -171,7 +173,7 @@ fun AmbientSandboxScreen() {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp)
+                    .height(350.dp)
             ) {
                 AndroidView(
                     factory = { ctx ->
@@ -179,6 +181,7 @@ fun AmbientSandboxScreen() {
                             attachPlayer(exoPlayer)
                             ambientBackdropView.onDominantColorListener = { rgb ->
                                 dominantColor = Color(rgb)
+                                framesCount = ambientBackdropView.framesProcessed
                             }
                         }
                     },
@@ -216,6 +219,7 @@ fun AmbientSandboxScreen() {
             MockYouTubeContent(
                 title = SAMPLE_VIDEOS[currentVideoIndex].title,
                 statusText = playbackStatus,
+                framesCount = framesCount,
                 ambientShadowColor = dominantColor
             )
 
@@ -246,6 +250,7 @@ fun AmbientSandboxScreen() {
 fun MockYouTubeContent(
     title: String,
     statusText: String = "Воспроизведение",
+    framesCount: Long = 0L,
     ambientShadowColor: Color
 ) {
     Column(
@@ -260,9 +265,9 @@ fun MockYouTubeContent(
             color = Color.White
         )
         Text(
-            text = "Статус: $statusText • 1.2 млн просмотров",
+            text = "Статус: $statusText • Кадров подсветки: $framesCount",
             fontSize = 12.sp,
-            color = Color.Gray
+            color = Color(0xFFAAAAAA)
         )
 
         Spacer(modifier = Modifier.height(12.dp))

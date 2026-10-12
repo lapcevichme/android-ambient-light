@@ -84,13 +84,25 @@ class AmbientShader {
             // Soft vignette falloff towards outer edges
             float2 dist = abs(normUV - 0.5) * 2.0;
             float falloff = 1.0 - smoothstep(0.65, 1.0, max(dist.x, dist.y));
-            color.a *= falloff;
 
-            return color;
+            // Return with premultiplied alpha for proper Skia blending
+            return half4(color.rgb * falloff, color.a * falloff);
         }
     """.trimIndent()
 
     val runtimeShader = RuntimeShader(shaderSource)
+
+    init {
+        // Initialize default safe uniforms to avoid driver crashes before first frame arrives
+        val dummy = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+            setPixel(0, 0, android.graphics.Color.DKGRAY)
+        }
+        updateTexture(dummy)
+        updateResolution(100f, 100f)
+        updateCrop(CropBounds())
+        updateSpread(1.35f)
+        updateVibrance(0.25f)
+    }
 
     fun updateResolution(width: Float, height: Float) {
         runtimeShader.setFloatUniform("uResolution", width, height)
