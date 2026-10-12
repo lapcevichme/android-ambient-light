@@ -34,8 +34,8 @@ class TemporalSmoother(
         val currentPixels = IntArray(pixelCount)
         input.getPixels(currentPixels, 0, width, 0, 0, width, height)
 
-        if (prev.all { it == 0 }) {
-            // First frame initialization
+        if (prev.all { it == 0 } || flickerReductionPercent <= 0) {
+            // First frame initialization or flicker reduction disabled
             System.arraycopy(currentPixels, 0, prev, 0, pixelCount)
             currentSmoothed.setPixels(currentPixels, 0, width, 0, 0, width, height)
             return currentSmoothed
@@ -56,19 +56,21 @@ class TemporalSmoother(
             val pastG = (past shr 8 and 0xFF) / 255f
             val pastB = (past and 0xFF) / 255f
 
-            // Rec. 709 luminance difference
+            // Rec. 709 luminance difference (identical to canvas-webgl.js)
             val currLum = currR * 0.213f + currG * 0.715f + currB * 0.072f
             val pastLum = pastR * 0.213f + pastG * 0.715f + pastB * 0.072f
             val diff = abs(currLum - pastLum)
 
-            // Cubic response curve: higher luminance jumps accelerate blend factor to 1.0
+            // Cubic response curve from canvas-webgl.js:
+            // percentage = min(1., (1. - (difference^3)) * flickerReductionDifference)
+            // gl_FragColor = currentColor * percentage + previousColor * (1. - percentage)
             val cubicDiff = diff * diff * diff
-            val blendFactor = min(1f, (1f - cubicDiff) * flickerMultiplier)
-            val currentWeight = 1f - blendFactor
+            val percentage = min(1f, (1f - cubicDiff) * flickerMultiplier)
+            val previousWeight = 1f - percentage
 
-            val outR = (pastR * blendFactor + currR * currentWeight).coerceIn(0f, 1f)
-            val outG = (pastG * blendFactor + currG * currentWeight).coerceIn(0f, 1f)
-            val outB = (pastB * blendFactor + currB * currentWeight).coerceIn(0f, 1f)
+            val outR = (currR * percentage + pastR * previousWeight).coerceIn(0f, 1f)
+            val outG = (currG * percentage + pastG * previousWeight).coerceIn(0f, 1f)
+            val outB = (currB * percentage + pastB * previousWeight).coerceIn(0f, 1f)
 
             val outColor = Color.argb(
                 255,

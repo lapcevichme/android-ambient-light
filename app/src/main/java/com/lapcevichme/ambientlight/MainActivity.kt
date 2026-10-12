@@ -223,6 +223,7 @@ fun AmbientSandboxScreen() {
 
     LaunchedEffect(currentVideoIndex, customVideoUri) {
         playbackError = null
+        backdropView.reset()
         val mediaUri = customVideoUri ?: Uri.parse(SAMPLE_VIDEOS[currentVideoIndex].uriString(context.packageName))
         exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri))
         exoPlayer.prepare()

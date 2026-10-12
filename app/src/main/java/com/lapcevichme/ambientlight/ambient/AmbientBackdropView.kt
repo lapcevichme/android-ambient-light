@@ -179,6 +179,10 @@ class AmbientBackdropView @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
+    private var lastAvgR = 40
+    private var lastAvgG = 40
+    private var lastAvgB = 40
+
     private fun computeAverageColor(bitmap: Bitmap) {
         val listener = onDominantColorListener ?: return
         var sumR = 0L
@@ -198,11 +202,34 @@ class AmbientBackdropView @JvmOverloads constructor(
             sumB += Color.blue(pixel)
         }
 
-        val avgR = (sumR / total).toInt().coerceIn(0, 255)
-        val avgG = (sumG / total).toInt().coerceIn(0, 255)
-        val avgB = (sumB / total).toInt().coerceIn(0, 255)
+        val targetR = (sumR / total).toInt().coerceIn(0, 255)
+        val targetG = (sumG / total).toInt().coerceIn(0, 255)
+        val targetB = (sumB / total).toInt().coerceIn(0, 255)
 
-        listener(Color.rgb(avgR, avgG, avgB))
+        // Exponential smoothing for dominant color to prevent Compose shadow flickering during flashes
+        val smoothedR = (lastAvgR + (targetR - lastAvgR) * 0.2f).toInt()
+        val smoothedG = (lastAvgG + (targetG - lastAvgG) * 0.2f).toInt()
+        val smoothedB = (lastAvgB + (targetB - lastAvgB) * 0.2f).toInt()
+
+        if (kotlin.math.abs(smoothedR - lastAvgR) >= 2 ||
+            kotlin.math.abs(smoothedG - lastAvgG) >= 2 ||
+            kotlin.math.abs(smoothedB - lastAvgB) >= 2
+        ) {
+            lastAvgR = smoothedR
+            lastAvgG = smoothedG
+            lastAvgB = smoothedB
+            listener(Color.rgb(smoothedR, smoothedG, smoothedB))
+        }
+    }
+
+    /**
+     * Resets smoothing and detector history (e.g. on seek or video change).
+     */
+    fun reset() {
+        letterboxDetector.reset()
+        temporalSmoother.reset()
+        hasValidFrame = false
+        postInvalidateOnAnimation()
     }
 
     override fun onDraw(canvas: Canvas) {
