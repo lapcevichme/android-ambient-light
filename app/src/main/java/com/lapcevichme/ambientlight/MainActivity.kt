@@ -1,14 +1,20 @@
 package com.lapcevichme.ambientlight
 
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +63,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -90,6 +99,7 @@ private val SAMPLE_VIDEOS = listOf(
 @Composable
 fun AmbientSandboxScreen() {
     val context = LocalContext.current
+    val activity = context as? ComponentActivity
 
     // Ambient settings state
     var isEnabled by remember { mutableStateOf(true) }
@@ -99,6 +109,7 @@ fun AmbientSandboxScreen() {
     var blurRadius by remember { mutableFloatStateOf(90f) }
     var flickerReduction by remember { mutableIntStateOf(50) }
     var currentVideoIndex by remember { mutableIntStateOf(0) }
+    var isFullscreen by remember { mutableStateOf(false) }
 
     // Playback state
     var playbackStatus by remember { mutableStateOf("Загрузка...") }
@@ -112,6 +123,22 @@ fun AmbientSandboxScreen() {
     val backdropView = remember { AmbientBackdropView(context) }
     val textureView = remember { InterceptingTextureView(context) }
     val frameBufferBitmap = remember { Bitmap.createBitmap(32, 18, Bitmap.Config.ARGB_8888) }
+
+    // Handle Orientation and System Bars for Fullscreen
+    DisposableEffect(isFullscreen) {
+        activity?.let { act ->
+            val windowInsetsController = WindowCompat.getInsetsController(act.window, act.window.decorView)
+            if (isFullscreen) {
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose { }
+    }
 
     // ExoPlayer lifecycle management
     val exoPlayer = remember {
@@ -156,7 +183,6 @@ fun AmbientSandboxScreen() {
     }
 
     DisposableEffect(Unit) {
-        // Connect frame interceptor to the backdrop view
         textureView.onFrameUpdatedListener = { view ->
             view.getBitmap(frameBufferBitmap)
             backdropView.processFrame(frameBufferBitmap)
@@ -173,6 +199,189 @@ fun AmbientSandboxScreen() {
         }
     }
 
+    // Sync ambient backdrop parameters
+    backdropView.isAmbientEnabled = isEnabled
+    backdropView.spreadLimit = spreadLimit
+    backdropView.brightness = brightness
+    backdropView.vibrance = vibrance
+    backdropView.blurRadius = blurRadius
+    backdropView.flickerReduction = flickerReduction
+
+    if (isFullscreen) {
+        FullscreenLandscapePlayer(
+            backdropView = backdropView,
+            textureView = textureView,
+            dominantColor = dominantColor,
+            isEnabled = isEnabled,
+            onToggleEnabled = { isEnabled = it },
+            onExitFullscreen = { isFullscreen = false }
+        )
+    } else {
+        PortraitSandboxView(
+            backdropView = backdropView,
+            textureView = textureView,
+            dominantColor = dominantColor,
+            isEnabled = isEnabled,
+            onEnabledChange = { isEnabled = it },
+            spreadLimit = spreadLimit,
+            onSpreadLimitChange = { spreadLimit = it },
+            brightness = brightness,
+            onBrightnessChange = { brightness = it },
+            vibrance = vibrance,
+            onVibranceChange = { vibrance = it },
+            blurRadius = blurRadius,
+            onBlurRadiusChange = { blurRadius = it },
+            flickerReduction = flickerReduction,
+            onFlickerReductionChange = { flickerReduction = it },
+            currentVideoIndex = currentVideoIndex,
+            onSwitchVideo = {
+                currentVideoIndex = (currentVideoIndex + 1) % SAMPLE_VIDEOS.size
+            },
+            onEnterFullscreen = { isFullscreen = true },
+            playbackStatus = playbackStatus,
+            playbackError = playbackError,
+            framesCount = framesCount
+        )
+    }
+}
+
+@Composable
+fun FullscreenLandscapePlayer(
+    backdropView: AmbientBackdropView,
+    textureView: InterceptingTextureView,
+    dominantColor: Color,
+    isEnabled: Boolean,
+    onToggleEnabled: (Boolean) -> Unit,
+    onExitFullscreen: () -> Unit
+) {
+    var showControls by remember { mutableStateOf(true) }
+
+    BackHandler {
+        onExitFullscreen()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { showControls = !showControls }
+    ) {
+        // LAYER 0: Ambient Backdrop fills the full landscape display (including letterbox/pillarbox bars)
+        AndroidView(
+            factory = { backdropView },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // LAYER 1: Centered 16:9 Video
+        Box(
+            modifier = Modifier
+                .aspectRatio(16f / 9f)
+                .align(Alignment.Center)
+                .shadow(
+                    elevation = 16.dp,
+                    ambientColor = dominantColor,
+                    spotColor = dominantColor
+                )
+        ) {
+            AndroidView(
+                factory = {
+                    textureView.apply {
+                        addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                            updateVideoCoordinates(view, backdropView)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // Overlay Controls
+        AnimatedVisibility(
+            visible = showControls,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+            ) {
+                // Top-Left: Exit button
+                Button(
+                    onClick = onExitFullscreen,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0x88000000)),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    Text("← Выход из полноэкранного", color = Color.White, fontSize = 13.sp)
+                }
+
+                // Top-Right: Ambient Light toggle
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0x88000000),
+                    border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("Подсветка: ", color = Color.White, fontSize = 12.sp)
+                        Switch(
+                            checked = isEnabled,
+                            onCheckedChange = onToggleEnabled
+                        )
+                    }
+                }
+
+                // Bottom: Info badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0x77000000),
+                    border = BorderStroke(1.dp, Color(0x22FFFFFF)),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 6.dp)
+                ) {
+                    Text(
+                        "Горизонтальный режим 20:9: Боковые полосы (Pillarbox) заполняются мягким свечением",
+                        color = Color(0xFFEEEEEE),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PortraitSandboxView(
+    backdropView: AmbientBackdropView,
+    textureView: InterceptingTextureView,
+    dominantColor: Color,
+    isEnabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    spreadLimit: Float,
+    onSpreadLimitChange: (Float) -> Unit,
+    brightness: Float,
+    onBrightnessChange: (Float) -> Unit,
+    vibrance: Float,
+    onVibranceChange: (Float) -> Unit,
+    blurRadius: Float,
+    onBlurRadiusChange: (Float) -> Unit,
+    flickerReduction: Int,
+    onFlickerReductionChange: (Int) -> Unit,
+    currentVideoIndex: Int,
+    onSwitchVideo: () -> Unit,
+    onEnterFullscreen: () -> Unit,
+    playbackStatus: String,
+    playbackError: String?,
+    framesCount: Long
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -207,14 +416,6 @@ fun AmbientSandboxScreen() {
                 // LAYER 0: Ambient Backdrop View matching the video + metadata stage
                 AndroidView(
                     factory = { backdropView },
-                    update = { view ->
-                        view.isAmbientEnabled = isEnabled
-                        view.spreadLimit = spreadLimit
-                        view.brightness = brightness
-                        view.vibrance = vibrance
-                        view.blurRadius = blurRadius
-                        view.flickerReduction = flickerReduction
-                    },
                     modifier = Modifier.matchParentSize()
                 )
 
@@ -246,6 +447,19 @@ fun AmbientSandboxScreen() {
                             },
                             modifier = Modifier.fillMaxSize()
                         )
+
+                        // Fullscreen trigger button overlay on video
+                        Button(
+                            onClick = onEnterFullscreen,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0x88000000)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(8.dp)
+                                .height(32.dp)
+                        ) {
+                            Text("⛶ Во весь экран", fontSize = 11.sp, color = Color.White)
+                        }
                     }
 
                     // Playback status or error indicator
@@ -282,21 +496,20 @@ fun AmbientSandboxScreen() {
             // Sandbox Controls Panel (Clearly separated below the player stage)
             AmbientControlPanel(
                 isEnabled = isEnabled,
-                onEnabledChange = { isEnabled = it },
+                onEnabledChange = onEnabledChange,
                 spreadLimit = spreadLimit,
-                onSpreadLimitChange = { spreadLimit = it },
+                onSpreadLimitChange = onSpreadLimitChange,
                 brightness = brightness,
-                onBrightnessChange = { brightness = it },
+                onBrightnessChange = onBrightnessChange,
                 vibrance = vibrance,
-                onVibranceChange = { vibrance = it },
+                onVibranceChange = onVibranceChange,
                 blurRadius = blurRadius,
-                onBlurRadiusChange = { blurRadius = it },
+                onBlurRadiusChange = onBlurRadiusChange,
                 flickerReduction = flickerReduction,
-                onFlickerReductionChange = { flickerReduction = it },
+                onFlickerReductionChange = onFlickerReductionChange,
                 currentVideoIndex = currentVideoIndex,
-                onSwitchVideo = {
-                    currentVideoIndex = (currentVideoIndex + 1) % SAMPLE_VIDEOS.size
-                }
+                onSwitchVideo = onSwitchVideo,
+                onEnterFullscreen = onEnterFullscreen
             )
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -465,7 +678,8 @@ fun AmbientControlPanel(
     flickerReduction: Int,
     onFlickerReductionChange: (Int) -> Unit,
     currentVideoIndex: Int,
-    onSwitchVideo: () -> Unit
+    onSwitchVideo: () -> Unit,
+    onEnterFullscreen: () -> Unit
 ) {
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -492,6 +706,17 @@ fun AmbientControlPanel(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Сменить тестовое видео (${currentVideoIndex + 1}/${SAMPLE_VIDEOS.size})")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Fullscreen Button
+            Button(
+                onClick = onEnterFullscreen,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C3E50)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("⛶ Открыть горизонтальный Fullscreen (20:9)")
             }
 
             Spacer(modifier = Modifier.height(10.dp))
