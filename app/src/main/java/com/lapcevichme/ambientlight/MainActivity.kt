@@ -47,6 +47,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ThumbDown
@@ -58,6 +59,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.lapcevichme.ambientlight.ambient.AmbientSettingsBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -168,6 +170,7 @@ fun AmbientSandboxScreen() {
     var customVideoUri by remember { mutableStateOf<Uri?>(null) }
     var customVideoName by remember { mutableStateOf<String?>(null) }
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
+    var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
 
     // Playback state
     var playbackStatus by remember { mutableStateOf("Загрузка...") }
@@ -285,7 +288,8 @@ fun AmbientSandboxScreen() {
             videoTitle = activeVideoTitle,
             isEnabled = isEnabled,
             onToggleEnabled = { isEnabled = it },
-            onExitFullscreen = { isFullscreen = false }
+            onExitFullscreen = { isFullscreen = false },
+            onOpenSettings = { showSettingsSheet = true }
         )
     } else {
         PortraitSandboxView(
@@ -293,22 +297,31 @@ fun AmbientSandboxScreen() {
             textureView = textureView,
             exoPlayer = exoPlayer,
             activeVideoTitle = activeVideoTitle,
+            onEnterFullscreen = { isFullscreen = true },
+            onOpenSettings = { showSettingsSheet = true },
+            playbackStatus = playbackStatus,
+            playbackError = playbackError,
+            framesCount = framesCount
+        )
+    }
+
+    if (showSettingsSheet) {
+        AmbientSettingsBottomSheet(
+            onDismissRequest = { showSettingsSheet = false },
             isEnabled = isEnabled,
             onEnabledChange = { isEnabled = it },
-            spreadLimit = spreadLimit,
-            onSpreadLimitChange = { spreadLimit = it },
-            edgeSize = edgeSize,
-            onEdgeSizeChange = { edgeSize = it },
+            blurRadius = blurRadius,
+            onBlurRadiusChange = { blurRadius = it },
             brightness = brightness,
             onBrightnessChange = { brightness = it },
             vibrance = vibrance,
             onVibranceChange = { vibrance = it },
-            blurRadius = blurRadius,
-            onBlurRadiusChange = { blurRadius = it },
+            spreadLimit = spreadLimit,
+            onSpreadLimitChange = { spreadLimit = it },
+            edgeSize = edgeSize,
+            onEdgeSizeChange = { edgeSize = it },
             flickerReduction = flickerReduction,
             onFlickerReductionChange = { flickerReduction = it },
-            currentVideoIndex = currentVideoIndex,
-            isCustomVideo = customVideoUri != null,
             onSwitchVideo = {
                 if (customVideoUri != null) {
                     customVideoUri = null
@@ -322,10 +335,15 @@ fun AmbientSandboxScreen() {
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
                 )
             },
-            onEnterFullscreen = { isFullscreen = true },
-            playbackStatus = playbackStatus,
-            playbackError = playbackError,
-            framesCount = framesCount
+            onResetDefaults = {
+                isEnabled = true
+                blurRadius = 50f
+                brightness = 1.0f
+                vibrance = 0.0f
+                spreadLimit = 0.55f
+                edgeSize = 0.12f
+                flickerReduction = 50
+            }
         )
     }
 }
@@ -347,7 +365,8 @@ private fun formatTimeMs(millis: Long): String {
 fun VideoPlayerControls(
     exoPlayer: ExoPlayer,
     modifier: Modifier = Modifier,
-    onEnterFullscreen: (() -> Unit)? = null
+    onEnterFullscreen: (() -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     var isPlaying by remember { mutableStateOf(exoPlayer.isPlaying) }
     var currentPositionMs by remember { mutableLongStateOf(0L) }
@@ -392,6 +411,32 @@ fun VideoPlayerControls(
                     .fillMaxSize()
                     .background(Color(0x55000000))
             ) {
+                // Top-Right: Settings Gear Button (opens Ambient Settings Sheet)
+                if (onOpenSettings != null) {
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(36.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0x66000000),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Настройки подсветки",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Center: Play / Pause Button
                 Surface(
                     shape = CircleShape,
@@ -490,7 +535,8 @@ fun FullscreenLandscapePlayer(
     videoTitle: String,
     isEnabled: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
-    onExitFullscreen: () -> Unit
+    onExitFullscreen: () -> Unit,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     var showControls by remember { mutableStateOf(true) }
 
@@ -538,7 +584,8 @@ fun FullscreenLandscapePlayer(
             // Overlaid controls with Scrubber and Play/Pause
             VideoPlayerControls(
                 exoPlayer = exoPlayer,
-                onEnterFullscreen = null
+                onEnterFullscreen = null,
+                onOpenSettings = onOpenSettings
             )
         }
 
@@ -611,25 +658,8 @@ fun PortraitSandboxView(
     textureView: InterceptingTextureView,
     exoPlayer: ExoPlayer,
     activeVideoTitle: String,
-    isEnabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    spreadLimit: Float,
-    onSpreadLimitChange: (Float) -> Unit,
-    edgeSize: Float,
-    onEdgeSizeChange: (Float) -> Unit,
-    brightness: Float,
-    onBrightnessChange: (Float) -> Unit,
-    vibrance: Float,
-    onVibranceChange: (Float) -> Unit,
-    blurRadius: Float,
-    onBlurRadiusChange: (Float) -> Unit,
-    flickerReduction: Int,
-    onFlickerReductionChange: (Int) -> Unit,
-    currentVideoIndex: Int,
-    isCustomVideo: Boolean,
-    onSwitchVideo: () -> Unit,
-    onPickGalleryVideo: () -> Unit,
     onEnterFullscreen: () -> Unit,
+    onOpenSettings: () -> Unit,
     playbackStatus: String,
     playbackError: String?,
     framesCount: Long
@@ -690,10 +720,11 @@ fun PortraitSandboxView(
                             modifier = Modifier.fillMaxSize()
                         )
 
-                        // Overlaid controls with Scrubber, Play/Pause, and Fullscreen toggle
+                        // Overlaid controls with Scrubber, Play/Pause, Fullscreen toggle, and Settings gear
                         VideoPlayerControls(
                             exoPlayer = exoPlayer,
-                            onEnterFullscreen = onEnterFullscreen
+                            onEnterFullscreen = onEnterFullscreen,
+                            onOpenSettings = onOpenSettings
                         )
                     }
 
@@ -730,28 +761,46 @@ fun PortraitSandboxView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Sandbox Controls Panel (Clearly separated below the player stage)
-            AmbientControlPanel(
-                isEnabled = isEnabled,
-                onEnabledChange = onEnabledChange,
-                spreadLimit = spreadLimit,
-                onSpreadLimitChange = onSpreadLimitChange,
-                edgeSize = edgeSize,
-                onEdgeSizeChange = onEdgeSizeChange,
-                brightness = brightness,
-                onBrightnessChange = onBrightnessChange,
-                vibrance = vibrance,
-                onVibranceChange = onVibranceChange,
-                blurRadius = blurRadius,
-                onBlurRadiusChange = onBlurRadiusChange,
-                flickerReduction = flickerReduction,
-                onFlickerReductionChange = onFlickerReductionChange,
-                currentVideoIndex = currentVideoIndex,
-                isCustomVideo = isCustomVideo,
-                onSwitchVideo = onSwitchVideo,
-                onPickGalleryVideo = onPickGalleryVideo,
-                onEnterFullscreen = onEnterFullscreen
-            )
+            // Quick Settings Access Bar at bottom of feed
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0x18FFFFFF),
+                border = BorderStroke(1.dp, Color(0x22FFFFFF)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .clickable { onOpenSettings() }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = Color(0xFF64B5F6),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Параметры подсветки (Ambient Mode)",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Text(
+                        text = "Настроить →",
+                        color = Color(0xFF64B5F6),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -1225,145 +1274,6 @@ fun SuggestedVideosFeed(
                     modifier = Modifier.size(18.dp)
                 )
             }
-        }
-    }
-}
-
-@Composable
-fun AmbientControlPanel(
-    isEnabled: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
-    spreadLimit: Float,
-    onSpreadLimitChange: (Float) -> Unit,
-    edgeSize: Float,
-    onEdgeSizeChange: (Float) -> Unit,
-    brightness: Float,
-    onBrightnessChange: (Float) -> Unit,
-    vibrance: Float,
-    onVibranceChange: (Float) -> Unit,
-    blurRadius: Float,
-    onBlurRadiusChange: (Float) -> Unit,
-    flickerReduction: Int,
-    onFlickerReductionChange: (Int) -> Unit,
-    currentVideoIndex: Int,
-    isCustomVideo: Boolean,
-    onSwitchVideo: () -> Unit,
-    onPickGalleryVideo: () -> Unit,
-    onEnterFullscreen: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x55181818)),
-        border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Настройки подсветки (Wessel Kroos Port)",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Gallery Video Picker Button
-            Button(
-                onClick = onPickGalleryVideo,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("📁 Выбрать видео из галереи")
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Switch Video Button
-            Button(
-                onClick = onSwitchVideo,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    if (isCustomVideo) {
-                        "Вернуться к тестовым видео (${currentVideoIndex + 1}/${SAMPLE_VIDEOS.size})"
-                    } else {
-                        "Сменить тестовое видео (${currentVideoIndex + 1}/${SAMPLE_VIDEOS.size})"
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Fullscreen Button
-            Button(
-                onClick = onEnterFullscreen,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C3E50)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("⛶ Открыть горизонтальный Fullscreen (20:9)")
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Ambient Toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Подсветка активна", color = Color.White, fontSize = 13.sp)
-                Switch(checked = isEnabled, onCheckedChange = onEnabledChange)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Spread Limit Slider (emanates outwards from player perimeter)
-            Text("Дальность лучей (Spread): ${(spreadLimit * 100).toInt()}%", color = Color.White, fontSize = 12.sp)
-            Slider(
-                value = spreadLimit,
-                onValueChange = onSpreadLimitChange,
-                valueRange = 0.1f..1.0f,
-                enabled = isEnabled
-            )
-
-            // Blur Radius Slider (0 dp allows inspecting pure rays from center)
-            Text("Мягкость размытия (Blur): ${blurRadius.toInt()} dp", color = Color.White, fontSize = 12.sp)
-            Slider(
-                value = blurRadius,
-                onValueChange = onBlurRadiusChange,
-                valueRange = 0f..120f,
-                enabled = isEnabled
-            )
-
-            // Brightness Slider
-            Text("Яркость свечения: ${(brightness * 100).toInt()}%", color = Color.White, fontSize = 12.sp)
-            Slider(
-                value = brightness,
-                onValueChange = onBrightnessChange,
-                valueRange = 0.2f..1.8f,
-                enabled = isEnabled
-            )
-
-            // Vibrance Slider
-            Text("Насыщенность (Vibrance): ${"%.2f".format(vibrance)}", color = Color.White, fontSize = 12.sp)
-            Slider(
-                value = vibrance,
-                onValueChange = onVibranceChange,
-                valueRange = -1.0f..1.0f,
-                enabled = isEnabled
-            )
-
-            // Flicker Reduction Slider
-            Text("Сглаживание мерцания (Flicker): $flickerReduction%", color = Color.White, fontSize = 12.sp)
-            Slider(
-                value = flickerReduction.toFloat(),
-                onValueChange = { onFlickerReductionChange(it.toInt()) },
-                valueRange = 0f..100f,
-                enabled = isEnabled
-            )
         }
     }
 }
