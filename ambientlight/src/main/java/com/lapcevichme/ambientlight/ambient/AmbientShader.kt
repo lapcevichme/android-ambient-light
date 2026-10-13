@@ -34,6 +34,11 @@ class AmbientShader {
         uniform float uEdgeSize;
         uniform float uVibrance;
         uniform float uBrightness;
+        uniform float uContrast;
+        uniform float4 uDirections; // (top, right, bottom, left) [1.0 = enabled, 0.0 = disabled]
+        uniform float uFadeStart;
+        uniform float uFadeCurve;
+        uniform float uOledMode;
 
         // Converts RGB color to HSV representation
         vec3 rgb2hsv(vec3 c) {
@@ -94,21 +99,29 @@ class AmbientShader {
                 normVideoUV = p * 0.5 + 0.5;
                 falloff = 1.0;
             } else {
-                // Outside video bounds: pure continuous radial projection from video center
-                // Rays radiate cleanly and continuously outward through the video perimeter, exactly like the original extension
-                normVideoUV = (p / s) * 0.5 + 0.5;
+                // Directional masking (Wessel Kroos directions filter):
+                float dirMask = 1.0;
+                if (p.y < -1.0 && uDirections.x < 0.5) dirMask = 0.0; // Top disabled
+                if (p.x > 1.0 && uDirections.y < 0.5) dirMask = 0.0;  // Right disabled
+                if (p.y > 1.0 && uDirections.z < 0.5) dirMask = 0.0;  // Bottom disabled
+                if (p.x < -1.0 && uDirections.w < 0.5) dirMask = 0.0; // Left disabled
 
-                // Isotropic distance falloff matching Wessel Kroos' projector-shadow.js
-                float r = (abs(p.x) >= abs(p.y)) ? ratio.x : ratio.y;
-                float maxDist = max(spread * 2.2 * r, 0.01);
-                float dist = (s - 1.0) / maxDist;
+                if (dirMask > 0.0) {
+                    // Outside video bounds: pure continuous radial projection from video center
+                    normVideoUV = (p / s) * 0.5 + 0.5;
 
-                if (dist < 1.0) {
-                    float fadeStart = 0.15;
-                    float easing = 16.0 / (35.0 * 0.64); // ~0.714
-                    float fadeProgress = clamp((dist - fadeStart) / max(1.0 - fadeStart, 0.001), 0.0, 1.0);
-                    float shadowAlpha = pow(fadeProgress, easing);
-                    falloff = 1.0 - shadowAlpha;
+                    // Isotropic distance falloff matching Wessel Kroos' projector-shadow.js
+                    float r = (abs(p.x) >= abs(p.y)) ? ratio.x : ratio.y;
+                    float maxDist = max(spread * 2.2 * r, 0.01);
+                    float dist = (s - 1.0) / maxDist;
+
+                    if (dist < 1.0) {
+                        float fadeStart = uFadeStart;
+                        float easing = 16.0 / (max(uFadeCurve, 1.0) * 0.64);
+                        float fadeProgress = clamp((dist - fadeStart) / max(1.0 - fadeStart, 0.001), 0.0, 1.0);
+                        float shadowAlpha = pow(fadeProgress, easing);
+                        falloff = (1.0 - shadowAlpha) * dirMask;
+                    }
                 }
             }
 
@@ -119,11 +132,24 @@ class AmbientShader {
             // Bilinear texture sample evaluated in downsampled pixel coordinates
             half4 color = videoTexture.eval(croppedUV * uTextureResolution);
 
+            // Contrast adjustment (around midpoint 0.5)
+            if (uContrast != 1.0) {
+                color.rgb = clamp(((color.rgb - 0.5) * uContrast) + 0.5, 0.0, 1.0);
+            }
+
             // Apply vibrance boost in HSV color space
             if (uVibrance != 0.0) {
                 vec3 hsv = rgb2hsv(color.rgb);
                 hsv.y = saturateValue(hsv.y, uVibrance);
                 color.rgb = half3(hsv2rgb(hsv));
+            }
+
+            // OLED pure blacks suppression: gently fade out weak glow on dark pixels
+            if (uOledMode > 0.5) {
+                float lum = dot(color.rgb, half3(0.2126, 0.7152, 0.0722));
+                if (lum < 0.04) {
+                    falloff *= smoothstep(0.0, 0.04, lum);
+                }
             }
 
             float intensity = falloff * uBrightness;
@@ -147,6 +173,10 @@ class AmbientShader {
         updateEdgeSize(0.12f)
         updateVibrance(0.0f)
         updateBrightness(1.0f)
+        updateContrast(1.0f)
+        updateDirections(top = true, right = true, bottom = true, left = true)
+        updateFadeParams(fadeStart = 0.15f, fadeCurve = 35f)
+        updateOledMode(false)
     }
 
     fun updateResolution(width: Float, height: Float) {
@@ -187,5 +217,28 @@ class AmbientShader {
 
     fun updateBrightness(brightness: Float) {
         runtimeShader.setFloatUniform("uBrightness", brightness)
+    }
+
+    fun updateContrast(contrast: Float) {
+        runtimeShader.setFloatUniform("uContrast", contrast)
+    }
+
+    fun updateDirections(top: Boolean, right: Boolean, bottom: Boolean, left: Boolean) {
+        runtimeShader.setFloatUniform(
+            "uDirections",
+            if (top) 1f else 0f,
+            if (right) 1f else 0f,
+            if (bottom) 1f else 0f,
+            if (left) 1f else 0f
+        )
+    }
+
+    fun updateFadeParams(fadeStart: Float, fadeCurve: Float) {
+        runtimeShader.setFloatUniform("uFadeStart", fadeStart)
+        runtimeShader.setFloatUniform("uFadeCurve", fadeCurve)
+    }
+
+    fun updateOledMode(enabled: Boolean) {
+        runtimeShader.setFloatUniform("uOledMode", if (enabled) 1f else 0f)
     }
 }

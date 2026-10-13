@@ -1,0 +1,62 @@
+<resources>
+    <string name="app_name">AmbientLight</string>
+
+    <!-- Ambient Light Settings Bottom Sheet Strings (Wessel Kroos Port) -->
+    <string name="ambient_title">Фоновая подсветка</string>
+    <string name="ambient_subtitle">Ambient Light • Wessel Kroos Port</string>
+    <string name="ambient_close">Закрыть</string>
+    <string name="ambient_enable">Включить подсветку</string>
+    <string name="ambient_status_active">Свечение активно</string>
+    <string name="ambient_status_disabled">Эффект отключен</string>
+    <string name="ambient_section_basic">ОСНОВНЫЕ ПАРАМЕТРЫ</string>
+    <string name="ambient_blur">Размытие лучей</string>
+    <string name="ambient_brightness">Яркость</string>
+    <string name="ambient_vibrance">Насыщенность (Vibrance)</string>
+    <string name="ambient_spread_limit">Длина лучей (Spread Limit)</string>
+    <string name="ambient_edge_size">Ширина забора с кромки</string>
+    <string name="ambient_flicker_reduction">Сглаживание мерцания (Flicker)</string>
+
+    <!-- Advanced Settings Section -->
+    <string name="ambient_section_advanced">Расширенные настройки</string>
+    <string name="ambient_section_advanced_desc">Направления, контраст, затухание, Letterbox, OLED</string>
+    <string name="ambient_section_directions">НАПРАВЛЕНИЯ СВЕЧЕНИЯ (DIRECTIONS)</string>
+    <string name="ambient_direction_top">↑ Верх</string>
+    <string name="ambient_direction_bottom">↓ Низ</string>
+    <string name="ambient_direction_left">← Лево</string>
+    <string name="ambient_direction_right">→ Право</string>
+    <string name="ambient_section_filters">ФИЛЬТРЫ И ДИСПЛЕЙ</string>
+    <string name="ambient_contrast">Контрастность</string>
+    <string name="ambient_oled_mode">Режим OLED (глубокий черный)</string>
+    <string name="ambient_oled_mode_desc">Отключает фоновое свечение на темных сценах для максимального контраста и экономии батареи</string>
+    <string name="ambient_section_bars">ОБРАБОТКА ЧЕРНЫХ ПОЛОС (BAR DETECTION)</string>
+    <string name="ambient_letterbox">Детекция полос (Letterbox)</string>
+    <string name="ambient_letterbox_desc">Удаляет черные полосы сверху/снизу и с боков для правильного позиционирования лучей</string>
+    <string name="ambient_section_fade">ЗАТУХАНИЕ ЛУЧЕЙ (SPREAD FADE)</string>
+    <string name="ambient_fade_start">Начало затухания (Fade Start)</string>
+    <string name="ambient_fade_curve">Кривая затухания (Fade Curve)</string>
+    <string name="ambient_reset_defaults">Сбросить все параметры по умолчанию</string>
+
+    <!-- Demo Player Sandbox Strings -->
+    <string name="demo_quick_settings">Параметры подсветки (Ambient Mode)</string>
+    <string name="demo_quick_settings_action">Настроить →</string>
+    <string name="demo_video_source_title">ИСТОЧНИК ВИДЕО (ДЕМО-ПЛЕЕР)</string>
+    <string name="demo_pick_gallery">📁 Выбрать видео из галереи</string>
+    <string name="demo_pick_gallery_another">📁 Выбрать другое видео из галереи</string>
+    <string name="demo_return_sample">🔄 Вернуться к тестовому видео</string>
+    <string name="demo_exit_fullscreen">← Выход из полноэкранного</string>
+    <string name="demo_fullscreen_badge">%1$s • Полноэкранный режим с подсветкой</string>
+    <string name="demo_ambient_label">Подсветка:</string>
+    <string name="demo_status_loading">Загрузка…</string>
+    <string name="demo_status_stopped">Остановлен</string>
+    <string name="demo_status_buffering">Буферизация…</string>
+    <string name="demo_status_playing">Воспроизведение</string>
+    <string name="demo_status_ended">Завершено</string>
+    <string name="demo_sample_offline">Оффлайн демо (Цвета + Letterbox)</string>
+
+    <!-- Feed Mock Strings -->
+    <string name="feed_kurzgesagt_thumb_headline">ЧТО ЕСЛИ?</string>
+    <string name="feed_kurzgesagt_title">Что если бы у Земли были кольца? – Загадки Вселенной</string>
+    <string name="feed_kurzgesagt_meta">Kurzgesagt – In a Nutshell • 14 млн • 1 неделю назад</string>
+    <string name="feed_deco_meta">5 дней назад</string>
+    <string name="feed_more_options">Опции</string>
+</resources>

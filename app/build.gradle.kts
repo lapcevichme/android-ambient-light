@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.lapcevichme.ambientlight"
+    namespace = "com.lapcevichme.ambientlight.app"
     compileSdk {
         version = release(37)
     }
@@ -40,6 +40,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":ambientlight"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

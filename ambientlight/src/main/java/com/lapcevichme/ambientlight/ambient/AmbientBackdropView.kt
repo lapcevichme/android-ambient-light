@@ -20,6 +20,7 @@ import androidx.annotation.RequiresApi
  * Designed to sit as the root backdrop across the entire viewing page/screen (like watch_while_layout).
  * Projects ambient light outwards from the video coordinates into the surrounding UI and screen edges.
  */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class AmbientBackdropView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -81,6 +82,65 @@ class AmbientBackdropView @JvmOverloads constructor(
             postInvalidateOnAnimation()
         }
 
+    var contrast: Float = 1.0f
+        set(value) {
+            field = value
+            ambientShader?.updateContrast(value)
+            postInvalidateOnAnimation()
+        }
+
+    var directionTop: Boolean = true
+        set(value) {
+            field = value
+            syncDirections()
+        }
+
+    var directionBottom: Boolean = true
+        set(value) {
+            field = value
+            syncDirections()
+        }
+
+    var directionLeft: Boolean = true
+        set(value) {
+            field = value
+            syncDirections()
+        }
+
+    var directionRight: Boolean = true
+        set(value) {
+            field = value
+            syncDirections()
+        }
+
+    private fun syncDirections() {
+        ambientShader?.updateDirections(directionTop, directionRight, directionBottom, directionLeft)
+        postInvalidateOnAnimation()
+    }
+
+    var fadeStart: Float = 0.15f
+        set(value) {
+            field = value
+            ambientShader?.updateFadeParams(fadeStart, fadeCurve)
+            postInvalidateOnAnimation()
+        }
+
+    var fadeCurve: Float = 35f
+        set(value) {
+            field = value
+            ambientShader?.updateFadeParams(fadeStart, fadeCurve)
+            postInvalidateOnAnimation()
+        }
+
+    var isOledMode: Boolean = false
+        set(value) {
+            field = value
+            ambientShader?.updateOledMode(value)
+            postInvalidateOnAnimation()
+        }
+
+    var isLetterboxDetectionEnabled: Boolean = true
+
     var blurRadius: Float = 50f
         set(value) {
             field = value
@@ -124,6 +184,10 @@ class AmbientBackdropView @JvmOverloads constructor(
             shader.updateEdgeSize(edgeSize)
             shader.updateBrightness(brightness)
             shader.updateVibrance(vibrance)
+            shader.updateContrast(contrast)
+            shader.updateDirections(directionTop, directionRight, directionBottom, directionLeft)
+            shader.updateFadeParams(fadeStart, fadeCurve)
+            shader.updateOledMode(isOledMode)
             shader.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)
             shaderPaint.shader = shader.runtimeShader
         } catch (e: Throwable) {
@@ -182,7 +246,7 @@ class AmbientBackdropView @JvmOverloads constructor(
     fun processFrame(rawFrame: Bitmap) {
         if (!isAmbientEnabled || rawFrame.width <= 0 || rawFrame.height <= 0) return
 
-        val crop = letterboxDetector.detect(rawFrame)
+        val crop = if (isLetterboxDetectionEnabled) letterboxDetector.detect(rawFrame) else CropBounds()
         val smoothed = temporalSmoother.smooth(rawFrame)
         framesProcessed++
 

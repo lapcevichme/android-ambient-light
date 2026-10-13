@@ -1,3 +1,62 @@
 <resources>
     <string name="app_name">AmbientLight</string>
+
+    <!-- Ambient Light Settings Bottom Sheet Strings (Wessel Kroos Port) -->
+    <string name="ambient_title">Ambient Light</string>
+    <string name="ambient_subtitle">Ambient Light • Wessel Kroos Port</string>
+    <string name="ambient_close">Close</string>
+    <string name="ambient_enable">Enable ambient light</string>
+    <string name="ambient_status_active">Glow active</string>
+    <string name="ambient_status_disabled">Effect disabled</string>
+    <string name="ambient_section_basic">BASIC SETTINGS</string>
+    <string name="ambient_blur">Blur radius</string>
+    <string name="ambient_brightness">Brightness</string>
+    <string name="ambient_vibrance">Vibrance</string>
+    <string name="ambient_spread_limit">Spread limit</string>
+    <string name="ambient_edge_size">Edge sample size</string>
+    <string name="ambient_flicker_reduction">Flicker reduction</string>
+
+    <!-- Advanced Settings Section -->
+    <string name="ambient_section_advanced">Advanced settings</string>
+    <string name="ambient_section_advanced_desc">Directions, contrast, falloff, letterbox, OLED</string>
+    <string name="ambient_section_directions">LIGHT DIRECTIONS</string>
+    <string name="ambient_direction_top">↑ Top</string>
+    <string name="ambient_direction_bottom">↓ Bottom</string>
+    <string name="ambient_direction_left">← Left</string>
+    <string name="ambient_direction_right">→ Right</string>
+    <string name="ambient_section_filters">FILTERS &amp; DISPLAY</string>
+    <string name="ambient_contrast">Contrast</string>
+    <string name="ambient_oled_mode">OLED mode (true blacks)</string>
+    <string name="ambient_oled_mode_desc">Disables ambient glow on dark scenes to save power and preserve deep blacks</string>
+    <string name="ambient_section_bars">BLACK BARS DETECTION</string>
+    <string name="ambient_letterbox">Letterbox detection</string>
+    <string name="ambient_letterbox_desc">Removes horizontal and vertical black bars for accurate glow positioning</string>
+    <string name="ambient_section_fade">SPREAD FADE &amp; FALLOFF</string>
+    <string name="ambient_fade_start">Fade start</string>
+    <string name="ambient_fade_curve">Fade curve</string>
+    <string name="ambient_reset_defaults">Reset all settings to default</string>
+
+    <!-- Demo Player Sandbox Strings -->
+    <string name="demo_quick_settings">Ambient Light (Ambient Mode)</string>
+    <string name="demo_quick_settings_action">Configure →</string>
+    <string name="demo_video_source_title">VIDEO SOURCE (DEMO PLAYER)</string>
+    <string name="demo_pick_gallery">📁 Choose video from gallery</string>
+    <string name="demo_pick_gallery_another">📁 Choose another video from gallery</string>
+    <string name="demo_return_sample">🔄 Return to offline test video</string>
+    <string name="demo_exit_fullscreen">← Exit fullscreen</string>
+    <string name="demo_fullscreen_badge">%1$s • Fullscreen ambient light mode</string>
+    <string name="demo_ambient_label">Ambient light:</string>
+    <string name="demo_status_loading">Loading…</string>
+    <string name="demo_status_stopped">Stopped</string>
+    <string name="demo_status_buffering">Buffering…</string>
+    <string name="demo_status_playing">Playing</string>
+    <string name="demo_status_ended">Ended</string>
+    <string name="demo_sample_offline">Offline demo (Colors + Letterbox)</string>
+
+    <!-- Feed Mock Strings -->
+    <string name="feed_kurzgesagt_thumb_headline">WHAT IF?</string>
+    <string name="feed_kurzgesagt_title">What If Earth Had Rings? – Exploring The Universe</string>
+    <string name="feed_kurzgesagt_meta">Kurzgesagt – In a Nutshell • 14M views • 1 week ago</string>
+    <string name="feed_deco_meta">5 days ago</string>
+    <string name="feed_more_options">Options</string>
 </resources>

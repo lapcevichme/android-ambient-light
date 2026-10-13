@@ -24,4 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AmbientLight"
 include(":app")
- 
+include(":ambientlight")

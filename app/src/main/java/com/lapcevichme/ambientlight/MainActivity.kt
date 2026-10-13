@@ -54,6 +54,7 @@ import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,6 +67,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -85,7 +87,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -102,7 +107,11 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.lapcevichme.ambientlight.app.R
 import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
+import com.lapcevichme.ambientlight.ambient.AmbientSettingsBottomSheet
+import com.lapcevichme.ambientlight.compose.rememberAmbientLightState
+import com.lapcevichme.ambientlight.compose.rememberAmbientVideoConnector
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
 import com.lapcevichme.ambientlight.ui.theme.AmbientLightTheme
 
@@ -120,14 +129,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-data class SampleVideo(val title: String, val uriString: (packageName: String) -> String)
-
-private val SAMPLE_VIDEOS = listOf(
-    SampleVideo("Оффлайн демо (Цвета + Letterbox)", { pkg -> "android.resource://$pkg/${R.raw.sample_ambient}" }),
-    SampleVideo("Big Buck Bunny (Онлайн)", { _ -> "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" }),
-    SampleVideo("Tears of Steel (Онлайн)", { _ -> "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4" }),
-    SampleVideo("Elephants Dream (Онлайн)", { _ -> "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4" })
-)
+private fun getOfflineDemoUri(packageName: String): Uri =
+    Uri.parse("android.resource://$packageName/${R.raw.sample_ambient}")
 
 private fun queryDisplayName(context: Context, uri: Uri): String? {
     if (uri.scheme == "content") {
@@ -159,21 +162,18 @@ fun AmbientSandboxScreen() {
     val activity = context as? ComponentActivity
 
     // Ambient settings state
-    var isEnabled by remember { mutableStateOf(true) }
-    var spreadLimit by remember { mutableFloatStateOf(0.55f) }
-    var edgeSize by remember { mutableFloatStateOf(0.12f) }
-    var brightness by remember { mutableFloatStateOf(1.0f) }
-    var vibrance by remember { mutableFloatStateOf(0.0f) }
-    var blurRadius by remember { mutableFloatStateOf(50f) }
-    var flickerReduction by remember { mutableIntStateOf(50) }
-    var currentVideoIndex by remember { mutableIntStateOf(0) }
+    val ambientState = rememberAmbientLightState(
+        initialSpreadLimit = 0.55f,
+        initialFlickerReduction = 50
+    )
+
     var customVideoUri by remember { mutableStateOf<Uri?>(null) }
     var customVideoName by remember { mutableStateOf<String?>(null) }
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
 
     // Playback state
-    var playbackStatus by remember { mutableStateOf("Загрузка...") }
+    var playbackStatus by remember { mutableStateOf(context.getString(R.string.demo_status_loading)) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var framesCount by remember { mutableStateOf(0L) }
 
@@ -185,7 +185,8 @@ fun AmbientSandboxScreen() {
         }
     }
 
-    val activeVideoTitle = customVideoName ?: SAMPLE_VIDEOS[currentVideoIndex].title
+    val defaultDemoTitle = stringResource(R.string.demo_sample_offline)
+    val activeVideoTitle = customVideoName ?: defaultDemoTitle
 
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -203,10 +204,9 @@ fun AmbientSandboxScreen() {
         }
     }
 
-    // Shared Views & Buffers attached to the player stage
+    // Shared Views attached to the player stage
     val backdropView = remember { AmbientBackdropView(context) }
     val textureView = remember { InterceptingTextureView(context) }
-    val frameBufferBitmap = remember { Bitmap.createBitmap(128, 72, Bitmap.Config.ARGB_8888) }
 
     // Handle Orientation and System Bars for Fullscreen
     DisposableEffect(isFullscreen) {
@@ -228,11 +228,11 @@ fun AmbientSandboxScreen() {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 playbackStatus = when (playbackState) {
-                    Player.STATE_IDLE -> "Остановлен"
-                    Player.STATE_BUFFERING -> "Буферизация..."
-                    Player.STATE_READY -> "Воспроизведение"
-                    Player.STATE_ENDED -> "Завершено"
-                    else -> "Неизвестно"
+                    Player.STATE_IDLE -> context.getString(R.string.demo_status_stopped)
+                    Player.STATE_BUFFERING -> context.getString(R.string.demo_status_buffering)
+                    Player.STATE_READY -> context.getString(R.string.demo_status_playing)
+                    Player.STATE_ENDED -> context.getString(R.string.demo_status_ended)
+                    else -> "—"
                 }
             }
 
@@ -246,20 +246,18 @@ fun AmbientSandboxScreen() {
         }
     }
 
-    LaunchedEffect(currentVideoIndex, customVideoUri) {
+    LaunchedEffect(customVideoUri) {
         playbackError = null
         backdropView.reset()
-        val mediaUri = customVideoUri ?: Uri.parse(SAMPLE_VIDEOS[currentVideoIndex].uriString(context.packageName))
+        val mediaUri = customVideoUri ?: getOfflineDemoUri(context.packageName)
         exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri))
         exoPlayer.prepare()
         exoPlayer.play()
     }
 
+    rememberAmbientVideoConnector(backdropView, textureView)
+
     DisposableEffect(Unit) {
-        textureView.onFrameUpdatedListener = { view ->
-            view.getBitmap(frameBufferBitmap)
-            backdropView.processFrame(frameBufferBitmap)
-        }
         exoPlayer.setVideoTextureView(textureView)
 
         backdropView.onDominantColorListener = { _ ->
@@ -272,13 +270,7 @@ fun AmbientSandboxScreen() {
     }
 
     // Sync ambient backdrop parameters
-    backdropView.isAmbientEnabled = isEnabled
-    backdropView.spreadLimit = spreadLimit
-    backdropView.edgeSize = edgeSize
-    backdropView.brightness = brightness
-    backdropView.vibrance = vibrance
-    backdropView.blurRadius = blurRadius
-    backdropView.flickerReduction = flickerReduction
+    ambientState.applyTo(backdropView)
 
     if (isFullscreen) {
         FullscreenLandscapePlayer(
@@ -286,8 +278,8 @@ fun AmbientSandboxScreen() {
             textureView = textureView,
             exoPlayer = exoPlayer,
             videoTitle = activeVideoTitle,
-            isEnabled = isEnabled,
-            onToggleEnabled = { isEnabled = it },
+            isEnabled = ambientState.isEnabled,
+            onToggleEnabled = { ambientState.isEnabled = it },
             onExitFullscreen = { isFullscreen = false },
             onOpenSettings = { showSettingsSheet = true }
         )
@@ -301,49 +293,24 @@ fun AmbientSandboxScreen() {
             onOpenSettings = { showSettingsSheet = true },
             playbackStatus = playbackStatus,
             playbackError = playbackError,
-            framesCount = framesCount
-        )
-    }
-
-    if (showSettingsSheet) {
-        AmbientSettingsBottomSheet(
-            onDismissRequest = { showSettingsSheet = false },
-            isEnabled = isEnabled,
-            onEnabledChange = { isEnabled = it },
-            blurRadius = blurRadius,
-            onBlurRadiusChange = { blurRadius = it },
-            brightness = brightness,
-            onBrightnessChange = { brightness = it },
-            vibrance = vibrance,
-            onVibranceChange = { vibrance = it },
-            spreadLimit = spreadLimit,
-            onSpreadLimitChange = { spreadLimit = it },
-            edgeSize = edgeSize,
-            onEdgeSizeChange = { edgeSize = it },
-            flickerReduction = flickerReduction,
-            onFlickerReductionChange = { flickerReduction = it },
-            onSwitchVideo = {
-                if (customVideoUri != null) {
-                    customVideoUri = null
-                    customVideoName = null
-                } else {
-                    currentVideoIndex = (currentVideoIndex + 1) % SAMPLE_VIDEOS.size
-                }
-            },
+            framesCount = framesCount,
+            isCustomVideo = customVideoUri != null,
             onPickGalleryVideo = {
                 videoPickerLauncher.launch(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
                 )
             },
-            onResetDefaults = {
-                isEnabled = true
-                blurRadius = 50f
-                brightness = 1.0f
-                vibrance = 0.0f
-                spreadLimit = 0.55f
-                edgeSize = 0.12f
-                flickerReduction = 50
+            onResetToSample = {
+                customVideoUri = null
+                customVideoName = null
             }
+        )
+    }
+
+    if (showSettingsSheet) {
+        AmbientSettingsBottomSheet(
+            state = ambientState,
+            onDismissRequest = { showSettingsSheet = false }
         )
     }
 }
@@ -608,7 +575,7 @@ fun FullscreenLandscapePlayer(
                     shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.align(Alignment.TopStart)
                 ) {
-                    Text("← Выход из полноэкранного", color = Color.White, fontSize = 13.sp)
+                    Text(stringResource(R.string.demo_exit_fullscreen), color = Color.White, fontSize = 13.sp)
                 }
 
                 // Top-Right: Ambient Light toggle
@@ -622,10 +589,18 @@ fun FullscreenLandscapePlayer(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text("Подсветка: ", color = Color.White, fontSize = 12.sp)
+                        Text(stringResource(R.string.demo_ambient_label) + " ", color = Color.White, fontSize = 12.sp)
                         Switch(
                             checked = isEnabled,
-                            onCheckedChange = onToggleEnabled
+                            onCheckedChange = onToggleEnabled,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF1E1E1E),
+                                checkedTrackColor = Color.White,
+                                checkedBorderColor = Color.Transparent,
+                                uncheckedThumbColor = Color(0xFFAAAAAA),
+                                uncheckedTrackColor = Color(0x28FFFFFF),
+                                uncheckedBorderColor = Color(0x33FFFFFF)
+                            )
                         )
                     }
                 }
@@ -640,7 +615,7 @@ fun FullscreenLandscapePlayer(
                         .padding(bottom = 6.dp)
                 ) {
                     Text(
-                        "$videoTitle • Полноэкранный режим с подсветкой",
+                        stringResource(R.string.demo_fullscreen_badge, videoTitle),
                         color = Color(0xFFEEEEEE),
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
@@ -662,7 +637,10 @@ fun PortraitSandboxView(
     onOpenSettings: () -> Unit,
     playbackStatus: String,
     playbackError: String?,
-    framesCount: Long
+    framesCount: Long,
+    isCustomVideo: Boolean,
+    onPickGalleryVideo: () -> Unit,
+    onResetToSample: () -> Unit
 ) {
     Scaffold(
         containerColor = Color(0xFF0F0F0F)
@@ -782,23 +760,77 @@ fun PortraitSandboxView(
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = null,
-                            tint = Color(0xFF64B5F6),
+                            tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Параметры подсветки (Ambient Mode)",
+                            text = stringResource(R.string.demo_quick_settings),
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
                     Text(
-                        text = "Настроить →",
-                        color = Color(0xFF64B5F6),
+                        text = stringResource(R.string.demo_quick_settings_action),
+                        color = Color(0xFFAAAAAA),
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Medium
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Video Source & Demo Controls Card
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0x18FFFFFF),
+                border = BorderStroke(1.dp, Color(0x22FFFFFF)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = stringResource(R.string.demo_video_source_title),
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    )
+                    Button(
+                        onClick = onPickGalleryVideo,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color(0xFF0F0F0F)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (isCustomVideo) stringResource(R.string.demo_pick_gallery_another)
+                            else stringResource(R.string.demo_pick_gallery),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (isCustomVideo) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onResetToSample,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = stringResource(R.string.demo_return_sample),
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1060,100 +1092,151 @@ fun SuggestedVideosFeed(
             .padding(top = 10.dp)
     ) {
         // --- Kurzgesagt Video Card ---
-        // 16:9 Thumbnail: "WE LOST CONTROL"
+        // 16:9 Thumbnail: Peaceful cosmic science theme
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .background(Color(0xFF1A1A1A))
+                .background(Color(0xFF0C101A))
         ) {
-            // Stylized graphic matching the screenshot thumbnail
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
                 val h = size.height
-                val center = Offset(w * 0.5f, h * 0.55f)
 
-                // Background radial glow
+                // 1. Deep space gradient background
                 drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFFFDD00), Color(0xFFFF5722), Color(0xFF880E4F), Color(0xFF0F051D)),
-                        center = center,
-                        radius = w * 0.6f
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF090D1E),
+                            Color(0xFF131A3D),
+                            Color(0xFF1C1335),
+                            Color(0xFF0A0E24)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(w, h)
                     )
                 )
 
-                // Dramatic sunburst rays around eye
-                val rayCount = 28
-                for (i in 0 until rayCount) {
-                    val angle = (i.toFloat() / rayCount) * (2f * Math.PI.toFloat())
-                    val r1 = w * 0.18f
-                    val r2 = if (i % 2 == 0) w * 0.35f else w * 0.28f
-                    val x1 = center.x + kotlin.math.cos(angle) * r1
-                    val y1 = center.y + kotlin.math.sin(angle) * r1
-                    val x2 = center.x + kotlin.math.cos(angle) * r2
-                    val y2 = center.y + kotlin.math.sin(angle) * r2
-                    drawLine(
-                        color = if (i % 3 == 0) Color(0xFF00E5FF) else Color(0xFFFFEB3B),
-                        start = Offset(x1, y1),
-                        end = Offset(x2, y2),
-                        strokeWidth = 3f
+                // 2. Soft pastel nebula glow clouds
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x4438BDF8), Color(0x180284C7), Color.Transparent),
+                        center = Offset(w * 0.72f, h * 0.5f),
+                        radius = w * 0.42f
+                    ),
+                    radius = w * 0.42f,
+                    center = Offset(w * 0.72f, h * 0.5f)
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x38818CF8), Color(0x146366F1), Color.Transparent),
+                        center = Offset(w * 0.35f, h * 0.65f),
+                        radius = w * 0.35f
+                    ),
+                    radius = w * 0.35f,
+                    center = Offset(w * 0.35f, h * 0.65f)
+                )
+
+                // 3. Delicate twinkling stars (fixed deterministic coordinates)
+                val stars = listOf(
+                    0.08f to 0.15f, 0.18f to 0.12f, 0.32f to 0.22f, 0.48f to 0.14f,
+                    0.65f to 0.12f, 0.82f to 0.18f, 0.92f to 0.28f, 0.12f to 0.48f,
+                    0.22f to 0.75f, 0.38f to 0.85f, 0.78f to 0.88f, 0.90f to 0.72f,
+                    0.52f to 0.32f, 0.85f to 0.42f, 0.05f to 0.85f, 0.42f to 0.45f
+                )
+                for ((sx, sy) in stars) {
+                    drawCircle(
+                        color = Color(0xEEFFFFFF),
+                        radius = 2.dp.toPx(),
+                        center = Offset(w * sx, h * sy)
                     )
                 }
 
-                // Eye outer ring
-                drawCircle(
-                    color = Color(0xFFD50000),
-                    radius = w * 0.17f,
-                    center = center
-                )
+                // 4. Stylized glowing ringed planet
+                val planetCenter = Offset(w * 0.62f, h * 0.52f)
+                val planetRadius = w * 0.16f
 
-                // Eye inner ring / iris
+                // Atmospheric outer halo
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFFF8A80), Color(0xFFD50000), Color(0xFF000000)),
-                        center = center,
-                        radius = w * 0.15f
+                        colors = listOf(Color(0x5538BDF8), Color(0x180284C7), Color.Transparent),
+                        center = planetCenter,
+                        radius = planetRadius * 1.4f
                     ),
-                    radius = w * 0.14f,
-                    center = center
+                    radius = planetRadius * 1.4f,
+                    center = planetCenter
                 )
 
-                // Pupil (vertical slit)
-                drawOval(
-                    color = Color.Black,
-                    topLeft = Offset(center.x - w * 0.025f, center.y - h * 0.16f),
-                    size = Size(w * 0.05f, h * 0.32f)
+                // Back half of planetary rings (behind the sphere)
+                rotate(degrees = -24f, pivot = planetCenter) {
+                    drawOval(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0x88FDE047), Color(0x77F59E0B), Color(0x33F59E0B)),
+                            start = Offset(planetCenter.x - planetRadius * 2.2f, planetCenter.y),
+                            end = Offset(planetCenter.x + planetRadius * 2.2f, planetCenter.y)
+                        ),
+                        topLeft = Offset(planetCenter.x - planetRadius * 2.1f, planetCenter.y - planetRadius * 0.32f),
+                        size = Size(planetRadius * 4.2f, planetRadius * 0.64f),
+                        style = Stroke(width = 8.dp.toPx())
+                    )
+                }
+
+                // Planet sphere with 3D spherical gradient
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFF0B192C)),
+                        center = Offset(planetCenter.x - planetRadius * 0.3f, planetCenter.y - planetRadius * 0.3f),
+                        radius = planetRadius * 1.2f
+                    ),
+                    radius = planetRadius,
+                    center = planetCenter
                 )
 
-                // Pupil center slit glow
-                drawOval(
-                    color = Color(0xFFFF1744),
-                    topLeft = Offset(center.x - w * 0.008f, center.y - h * 0.12f),
-                    size = Size(w * 0.016f, h * 0.24f)
-                )
+                // Front arc of planetary rings (in front of the sphere)
+                rotate(degrees = -24f, pivot = planetCenter) {
+                    drawArc(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0xEEFDE047), Color(0xDDF59E0B), Color(0x88F59E0B)),
+                            start = Offset(planetCenter.x - planetRadius * 2.2f, planetCenter.y),
+                            end = Offset(planetCenter.x + planetRadius * 2.2f, planetCenter.y)
+                        ),
+                        startAngle = 0f,
+                        sweepAngle = 180f,
+                        useCenter = false,
+                        topLeft = Offset(planetCenter.x - planetRadius * 2.1f, planetCenter.y - planetRadius * 0.32f),
+                        size = Size(planetRadius * 4.2f, planetRadius * 0.64f),
+                        style = Stroke(width = 8.dp.toPx())
+                    )
+                }
 
-                // White reflection highlight
-                drawOval(
-                    color = Color.White,
-                    topLeft = Offset(center.x - w * 0.08f, center.y - h * 0.13f),
-                    size = Size(w * 0.045f, h * 0.07f)
+                // Small orbiting moon
+                val moonCenter = Offset(planetCenter.x - planetRadius * 1.35f, planetCenter.y - planetRadius * 0.8f)
+                drawCircle(
+                    color = Color(0xFFE2E8F0),
+                    radius = 5.dp.toPx(),
+                    center = moonCenter
                 )
             }
 
-            // Bold Headline "WE LOST CONTROL" across top of thumbnail
-            Text(
-                text = "WE LOST CONTROL",
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 1.sp,
-                textAlign = TextAlign.Center,
+            // Headline "WHAT IF?" badge across top-left of thumbnail
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = Color(0x99000000),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-            )
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.feed_kurzgesagt_thumb_headline),
+                    color = Color(0xFFFFEB3B),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
 
-            // Duration badge in bottom right ("21:44")
+            // Duration badge in bottom right ("11:24")
             Surface(
                 shape = RoundedCornerShape(4.dp),
                 color = Color(0xDD000000),
@@ -1162,7 +1245,7 @@ fun SuggestedVideosFeed(
                     .padding(8.dp)
             ) {
                 Text(
-                    text = "21:44",
+                    text = "11:24",
                     color = Color.White,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -1193,7 +1276,7 @@ fun SuggestedVideosFeed(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "AI Just Crossed the Terrifying Line - Now What?",
+                    text = stringResource(R.string.feed_kurzgesagt_title),
                     color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1203,7 +1286,7 @@ fun SuggestedVideosFeed(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Kurzgesagt – In a Nutshell  ▷18 млн  7 дн. назад",
+                    text = stringResource(R.string.feed_kurzgesagt_meta),
                     color = Color(0xFFAAAAAA),
                     fontSize = 12.sp,
                     maxLines = 1,
@@ -1214,7 +1297,7 @@ fun SuggestedVideosFeed(
             IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Опции",
+                    contentDescription = stringResource(R.string.feed_more_options),
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
                 )
@@ -1254,7 +1337,7 @@ fun SuggestedVideosFeed(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("♪", color = Color(0xFFAAAAAA), fontSize = 12.sp)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("5 дней назад", color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                    Text(stringResource(R.string.feed_deco_meta), color = Color(0xFFAAAAAA), fontSize = 12.sp)
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -1269,7 +1352,7 @@ fun SuggestedVideosFeed(
             IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Опции",
+                    contentDescription = stringResource(R.string.feed_more_options),
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
                 )

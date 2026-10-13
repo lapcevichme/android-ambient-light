@@ -1,0 +1,36 @@
+<resources>
+    <!-- Ambient Light Settings Bottom Sheet Strings (Wessel Kroos Port) -->
+    <string name="ambient_title">Фоновая подсветка</string>
+    <string name="ambient_subtitle">Ambient Light • Wessel Kroos Port</string>
+    <string name="ambient_close">Закрыть</string>
+    <string name="ambient_enable">Включить подсветку</string>
+    <string name="ambient_status_active">Свечение активно</string>
+    <string name="ambient_status_disabled">Эффект отключен</string>
+    <string name="ambient_section_basic">ОСНОВНЫЕ ПАРАМЕТРЫ</string>
+    <string name="ambient_blur">Размытие лучей</string>
+    <string name="ambient_brightness">Яркость</string>
+    <string name="ambient_vibrance">Насыщенность (Vibrance)</string>
+    <string name="ambient_spread_limit">Длина лучей (Spread Limit)</string>
+    <string name="ambient_edge_size">Ширина забора с кромки</string>
+    <string name="ambient_flicker_reduction">Сглаживание мерцания (Flicker)</string>
+
+    <!-- Advanced Settings Section -->
+    <string name="ambient_section_advanced">Расширенные настройки</string>
+    <string name="ambient_section_advanced_desc">Направления, контраст, затухание, Letterbox, OLED</string>
+    <string name="ambient_section_directions">НАПРАВЛЕНИЯ СВЕЧЕНИЯ (DIRECTIONS)</string>
+    <string name="ambient_direction_top">↑ Верх</string>
+    <string name="ambient_direction_bottom">↓ Низ</string>
+    <string name="ambient_direction_left">← Лево</string>
+    <string name="ambient_direction_right">→ Право</string>
+    <string name="ambient_section_filters">ФИЛЬТРЫ И ДИСПЛЕЙ</string>
+    <string name="ambient_contrast">Контрастность</string>
+    <string name="ambient_oled_mode">Режим OLED (глубокий черный)</string>
+    <string name="ambient_oled_mode_desc">Отключает фоновое свечение на темных сценах для максимального контраста и экономии батареи</string>
+    <string name="ambient_section_bars">ОБРАБОТКА ЧЕРНЫХ ПОЛОС (BAR DETECTION)</string>
+    <string name="ambient_letterbox">Детекция полос (Letterbox)</string>
+    <string name="ambient_letterbox_desc">Удаляет черные полосы сверху/снизу и с боков для правильного позиционирования лучей</string>
+    <string name="ambient_section_fade">ЗАТУХАНИЕ ЛУЧЕЙ (SPREAD FADE)</string>
+    <string name="ambient_fade_start">Начало затухания (Fade Start)</string>
+    <string name="ambient_fade_curve">Кривая затухания (Fade Curve)</string>
+    <string name="ambient_reset_defaults">Сбросить все параметры по умолчанию</string>
+</resources>
