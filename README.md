@@ -151,5 +151,5 @@ Or configure individual parameters with the explicit overload if you don't use `
 
 ## 📄 License
 
-Apache License 2.0. See [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE) for details.
 Portions derived from [youtube-ambient-light](https://github.com/WesselKroos/youtube-ambient-light) by Wessel Kroos.
