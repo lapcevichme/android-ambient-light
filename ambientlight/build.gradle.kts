@@ -62,7 +62,7 @@ afterEvaluate {
             create<MavenPublication>("release") {
                 from(components["release"])
                 groupId = "com.github.lapcevichme"
-                artifactId = "ambientlight"
+                artifactId = "android-ambient-light"
                 version = "1.0.0"
             }
         }

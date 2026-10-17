@@ -36,7 +36,7 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.lapcevichme:ambientlight:1.0.0")
+    implementation("com.github.lapcevichme:android-ambient-light:1.0.0")
 }
 ```
 
