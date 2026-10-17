@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import kotlin.math.abs
 import kotlin.math.min
+import androidx.core.graphics.createBitmap
 
 /**
  * Temporal frame blending with cubic luminance difference response curve.
@@ -25,7 +26,7 @@ class TemporalSmoother(
 
         var currentSmoothed = smoothedBitmap
         if (currentSmoothed == null || currentSmoothed.width != width || currentSmoothed.height != height) {
-            currentSmoothed = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            currentSmoothed = createBitmap(width, height)
             smoothedBitmap = currentSmoothed
             previousPixels = IntArray(pixelCount)
         }

@@ -20,7 +20,6 @@ import androidx.annotation.RequiresApi
  * Designed to sit as the root backdrop across the entire viewing page/screen (like watch_while_layout).
  * Projects ambient light outwards from the video coordinates into the surrounding UI and screen edges.
  */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class AmbientBackdropView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
@@ -29,7 +28,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     private val letterboxDetector = LetterboxDetector()
     private val temporalSmoother = TemporalSmoother()
-    private var ambientShader: AmbientShader? = null
+    private var ambientShader: AmbientShaderDelegate? = null
     private val shaderPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     // Fallback drawing structures
@@ -189,8 +188,8 @@ class AmbientBackdropView @JvmOverloads constructor(
             shader.updateFadeParams(fadeStart, fadeCurve)
             shader.updateOledMode(isOledMode)
             shader.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)
-            shaderPaint.shader = shader.runtimeShader
-        } catch (e: Throwable) {
+            shaderPaint.shader = shader.shader
+        } catch (_: Throwable) {
             // WORKAROUND: Fall back to scaled bitmap path if GPU driver fails AGSL compilation
             ambientShader = null
         }

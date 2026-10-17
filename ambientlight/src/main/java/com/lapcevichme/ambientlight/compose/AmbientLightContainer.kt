@@ -1,9 +1,7 @@
 package com.lapcevichme.ambientlight.compose
 
-import android.graphics.Bitmap
-import android.os.Build
+import android.annotation.SuppressLint
 import android.view.View
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
@@ -22,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
+import androidx.core.graphics.createBitmap
 
 /**
  * State holder controlling all parameters of the ambient light glow and rays.
@@ -87,7 +86,6 @@ class AmbientLightState(
     /**
      * Synchronizes this state's properties into the backing [AmbientBackdropView].
      */
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     fun applyTo(backdropView: AmbientBackdropView) {
         backdropView.isAmbientEnabled = isEnabled
         backdropView.blurRadius = blurRadius
@@ -187,7 +185,6 @@ fun rememberAmbientLightState(
  * Top-level Composable container placing [AmbientBackdropView] behind user content
  * and automatically keeping light parameters synchronized.
  */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun AmbientLightContainer(
     state: AmbientLightState,
@@ -213,7 +210,6 @@ fun AmbientLightContainer(
 /**
  * Helper to remember an [AmbientBackdropView] instance bound to the local context.
  */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun rememberAmbientBackdropView(): AmbientBackdropView {
     val context = LocalContext.current
@@ -224,7 +220,7 @@ fun rememberAmbientBackdropView(): AmbientBackdropView {
  * Helper to link an [InterceptingTextureView] with an [AmbientBackdropView],
  * creating a zero-allocation frame capture loop and automatic position synchronization.
  */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@SuppressLint("ComposableNaming")
 @Composable
 fun rememberAmbientVideoConnector(
     backdropView: AmbientBackdropView,
@@ -233,7 +229,7 @@ fun rememberAmbientVideoConnector(
     downsampleHeight: Int = 72
 ) {
     val frameBuffer = remember(downsampleWidth, downsampleHeight) {
-        Bitmap.createBitmap(downsampleWidth, downsampleHeight, Bitmap.Config.ARGB_8888)
+        createBitmap(downsampleWidth, downsampleHeight)
     }
 
     DisposableEffect(backdropView, textureView) {
@@ -256,7 +252,6 @@ fun rememberAmbientVideoConnector(
     }
 }
 
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdropView) {
     if (videoView.width <= 0 || videoView.height <= 0 || backdropView.width <= 0 || backdropView.height <= 0) {
         videoView.post { updateVideoCoordinates(videoView, backdropView) }

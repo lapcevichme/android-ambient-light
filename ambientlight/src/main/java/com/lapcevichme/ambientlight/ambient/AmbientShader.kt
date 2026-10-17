@@ -1,13 +1,35 @@
 package com.lapcevichme.ambientlight.ambient
 
 import android.graphics.Bitmap
+import android.graphics.Bitmap.createBitmap
 import android.graphics.BitmapShader
 import android.graphics.Color
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.core.graphics.set
 import org.intellij.lang.annotations.Language
+
+/**
+ * Interface defining operations for ambient light shader renderers.
+ * Decouples views from API 33-specific [RuntimeShader] implementations.
+ */
+interface AmbientShaderDelegate {
+    val shader: Shader
+    fun updateResolution(width: Float, height: Float)
+    fun updateVideoRect(left: Float, top: Float, right: Float, bottom: Float)
+    fun updateTexture(bitmap: Bitmap)
+    fun updateCrop(bounds: CropBounds)
+    fun updateSpreadLimit(limit: Float)
+    fun updateEdgeSize(edgeSize: Float)
+    fun updateVibrance(vibrance: Float)
+    fun updateBrightness(brightness: Float)
+    fun updateContrast(contrast: Float)
+    fun updateDirections(top: Boolean, right: Boolean, bottom: Boolean, left: Boolean)
+    fun updateFadeParams(fadeStart: Float, fadeCurve: Float)
+    fun updateOledMode(enabled: Boolean)
+}
 
 /**
  * Manages the AGSL runtime shader for localized ambient light radiating from behind the player.
@@ -20,7 +42,7 @@ import org.intellij.lang.annotations.Language
  * 5. Radial distance falloff: smoothly dissolves light into the page background.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-class AmbientShader {
+class AmbientShader : AmbientShaderDelegate {
 
     @Language("AGSL")
     private val shaderSource = """
@@ -160,10 +182,11 @@ class AmbientShader {
     """.trimIndent()
 
     val runtimeShader = RuntimeShader(shaderSource)
+    override val shader: Shader get() = runtimeShader
 
     init {
-        val dummy = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
-            setPixel(0, 0, Color.DKGRAY)
+        val dummy = createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+            this[0, 0] = Color.DKGRAY
         }
         updateTexture(dummy)
         updateResolution(100f, 100f)
@@ -179,21 +202,21 @@ class AmbientShader {
         updateOledMode(false)
     }
 
-    fun updateResolution(width: Float, height: Float) {
+    override fun updateResolution(width: Float, height: Float) {
         runtimeShader.setFloatUniform("uResolution", width, height)
     }
 
-    fun updateVideoRect(left: Float, top: Float, right: Float, bottom: Float) {
+    override fun updateVideoRect(left: Float, top: Float, right: Float, bottom: Float) {
         runtimeShader.setFloatUniform("uVideoRect", left, top, right, bottom)
     }
 
-    fun updateTexture(bitmap: Bitmap) {
+    override fun updateTexture(bitmap: Bitmap) {
         runtimeShader.setFloatUniform("uTextureResolution", bitmap.width.toFloat(), bitmap.height.toFloat())
         val bitmapShader = BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
         runtimeShader.setInputShader("videoTexture", bitmapShader)
     }
 
-    fun updateCrop(bounds: CropBounds) {
+    override fun updateCrop(bounds: CropBounds) {
         val cropOffsetX = bounds.left
         val cropOffsetY = bounds.top
         val cropScaleX = 1f - (bounds.left + bounds.right)
@@ -203,27 +226,27 @@ class AmbientShader {
         runtimeShader.setFloatUniform("uCropScale", cropScaleX.coerceAtLeast(0.01f), cropScaleY.coerceAtLeast(0.01f))
     }
 
-    fun updateSpreadLimit(limit: Float) {
+    override fun updateSpreadLimit(limit: Float) {
         runtimeShader.setFloatUniform("uSpreadLimit", limit)
     }
 
-    fun updateEdgeSize(edgeSize: Float) {
+    override fun updateEdgeSize(edgeSize: Float) {
         runtimeShader.setFloatUniform("uEdgeSize", edgeSize)
     }
 
-    fun updateVibrance(vibrance: Float) {
+    override fun updateVibrance(vibrance: Float) {
         runtimeShader.setFloatUniform("uVibrance", vibrance)
     }
 
-    fun updateBrightness(brightness: Float) {
+    override fun updateBrightness(brightness: Float) {
         runtimeShader.setFloatUniform("uBrightness", brightness)
     }
 
-    fun updateContrast(contrast: Float) {
+    override fun updateContrast(contrast: Float) {
         runtimeShader.setFloatUniform("uContrast", contrast)
     }
 
-    fun updateDirections(top: Boolean, right: Boolean, bottom: Boolean, left: Boolean) {
+    override fun updateDirections(top: Boolean, right: Boolean, bottom: Boolean, left: Boolean) {
         runtimeShader.setFloatUniform(
             "uDirections",
             if (top) 1f else 0f,
@@ -233,12 +256,12 @@ class AmbientShader {
         )
     }
 
-    fun updateFadeParams(fadeStart: Float, fadeCurve: Float) {
+    override fun updateFadeParams(fadeStart: Float, fadeCurve: Float) {
         runtimeShader.setFloatUniform("uFadeStart", fadeStart)
         runtimeShader.setFloatUniform("uFadeCurve", fadeCurve)
     }
 
-    fun updateOledMode(enabled: Boolean) {
+    override fun updateOledMode(enabled: Boolean) {
         runtimeShader.setFloatUniform("uOledMode", if (enabled) 1f else 0f)
     }
 }

@@ -120,7 +120,6 @@ data class AmbientSheetColors(
 /**
  * Overload of [AmbientSettingsBottomSheet] taking an [AmbientLightState] directly.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AmbientSettingsBottomSheet(
     state: AmbientLightState,

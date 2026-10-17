@@ -12,6 +12,7 @@ A high-performance ambient light glow effect library for Android video players (
 - **🖤 OLED Pure Blacks Mode**: Suppresses weak glow on dark scenes to save battery and preserve deep blacks.
 - **🧭 Directional Light Masks**: Independent toggles for Top, Bottom, Left, and Right glow directions.
 - **🎨 HSV Vibrance & Contrast**: Non-linear saturation boosting and contrast adjustment based on Wessel Kroos's WebGL shaders.
+- **📱 Broad Compatibility (Android 7.0+ / API 24+)**: Runs everywhere with automatic graceful degradation (high-precision AGSL ray-casting on Android 13+, hardware-filtered Canvas fallback on Android 7.0–12).
 - **🧩 Jetpack Compose & Classic Views Support**: First-class support for Compose (`AmbientLightContainer`) and XML Views (`AmbientBackdropView`).
 - **🎛️ Built-in Settings Sheet**: Ready-to-use YouTube-themed dark monochrome bottom sheet for real-time user customization.
 
@@ -138,17 +139,13 @@ var showSettings by remember { mutableStateOf(false) }
 
 if (showSettings) {
     AmbientSettingsBottomSheet(
-        isEnabled = ambientState.isEnabled,
-        onToggleEnabled = { ambientState.isEnabled = it },
-        blurRadius = ambientState.blurRadius,
-        onBlurRadiusChange = { ambientState.blurRadius = it },
-        brightness = ambientState.brightness,
-        onBrightnessChange = { ambientState.brightness = it },
-        // ... (all other parameters supported)
+        state = ambientState,
         onDismissRequest = { showSettings = false }
     )
 }
 ```
+
+Or configure individual parameters with the explicit overload if you don't use `AmbientLightState`.
 
 ---
 
