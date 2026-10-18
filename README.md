@@ -7,9 +7,11 @@
 
 An ambient light glow effect library for Android video players. Powered by **AGSL Runtime Shaders** (Android 13+) and **Skia Hardware RenderEffect Blur** (Android 12+), ported from [Wessel Kroos's ambient light engine](https://github.com/WesselKroos/youtube-ambilight).
 
-https://github.com/user-attachments/assets/c653d53c-8770-4490-96cf-07afa5669ffc
-
-<sub>Demo video: <a href="https://www.youtube.com/watch?v=S6_pO9xj4iM">The Larping Tombstone - "Looping the Rooms (Larping the Rooms)" (Remix)</a></sub>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/dec442a7-b24a-4d95-b50c-50beb3c44bf1" width="400" alt="Ambient Light Showcase" />
+  <br>
+  <sub>Demo video: <a href="https://www.youtube.com/watch?v=S6_pO9xj4iM">The Larping Tombstone - "Looping the Rooms (Larping the Rooms)" (Remix)</a></sub>
+</p>
 
 ## Features
 
