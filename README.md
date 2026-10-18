@@ -147,6 +147,31 @@ if (showSettings) {
 
 Or configure individual parameters with the explicit overload if you don't use `AmbientLightState`.
 
+### Customizing Theme & Colors (Material 3 / Material You)
+
+By default, the settings sheet uses YouTube's dark monochromatic style (`AmbientSheetColors.Default`). You can customize any color or connect it directly to your app's `MaterialTheme.colorScheme`:
+
+```kotlin
+val materialColors = AmbientSheetColors(
+    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor = MaterialTheme.colorScheme.onSurface,
+    secondaryContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    accentColor = MaterialTheme.colorScheme.primary,
+    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+    cardBackgroundColor = MaterialTheme.colorScheme.surfaceContainer,
+    cardBorderColor = MaterialTheme.colorScheme.outlineVariant,
+    switchCheckedTrackColor = MaterialTheme.colorScheme.primary,
+    switchCheckedThumbColor = MaterialTheme.colorScheme.onPrimary,
+    statusActiveColor = MaterialTheme.colorScheme.primary // or default pastel green Color(0xFF81C784)
+)
+
+AmbientSettingsBottomSheet(
+    state = ambientState,
+    onDismissRequest = { showSettings = false },
+    colors = materialColors
+)
+```
+
 ---
 
 ## 📄 License
