@@ -1,7 +1,6 @@
 package com.lapcevichme.ambientlight.compose
 
 import android.annotation.SuppressLint
-import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
@@ -20,7 +19,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
-import androidx.core.graphics.createBitmap
 
 /**
  * State holder controlling all parameters of the ambient light glow and rays.
@@ -228,45 +226,11 @@ fun rememberAmbientVideoConnector(
     downsampleWidth: Int = 128,
     downsampleHeight: Int = 72
 ) {
-    val frameBuffer = remember(downsampleWidth, downsampleHeight) {
-        createBitmap(downsampleWidth, downsampleHeight)
-    }
-
-    DisposableEffect(backdropView, textureView) {
-        textureView.onFrameUpdatedListener = { view ->
-            view.getBitmap(frameBuffer)
-            backdropView.processFrame(frameBuffer)
-        }
-
-        val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            updateVideoCoordinates(textureView, backdropView)
-        }
-        textureView.addOnLayoutChangeListener(layoutListener)
-        backdropView.addOnLayoutChangeListener(layoutListener)
-
+    DisposableEffect(backdropView, textureView, downsampleWidth, downsampleHeight) {
+        backdropView.attachTextureView(textureView, downsampleWidth, downsampleHeight)
         onDispose {
-            textureView.removeOnLayoutChangeListener(layoutListener)
-            backdropView.removeOnLayoutChangeListener(layoutListener)
-            textureView.onFrameUpdatedListener = null
+            backdropView.detachTextureView()
         }
     }
 }
 
-private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdropView) {
-    if (videoView.width <= 0 || videoView.height <= 0 || backdropView.width <= 0 || backdropView.height <= 0) {
-        videoView.post { updateVideoCoordinates(videoView, backdropView) }
-        return
-    }
-    val videoLoc = IntArray(2)
-    videoView.getLocationOnScreen(videoLoc)
-
-    val backdropLoc = IntArray(2)
-    backdropView.getLocationOnScreen(backdropLoc)
-
-    val relLeft = (videoLoc[0] - backdropLoc[0]).toFloat()
-    val relTop = (videoLoc[1] - backdropLoc[1]).toFloat()
-    val relRight = relLeft + videoView.width.toFloat()
-    val relBottom = relTop + videoView.height.toFloat()
-
-    backdropView.updateVideoPosition(relLeft, relTop, relRight, relBottom)
-}

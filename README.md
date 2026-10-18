@@ -114,26 +114,14 @@ fun VideoPlayerScreen(exoPlayer: ExoPlayer) {
 
 In your Activity / Fragment:
 
-```
-val frameBuffer = Bitmap.createBitmap(128, 72, Bitmap.Config.ARGB_8888)
+```kotlin
+// Automatically links frame extraction and synchronizes layout coordinates
+ambientBackdrop.attachTextureView(videoTexture)
 
-videoTexture.onFrameUpdatedListener = { view ->
-    view.getBitmap(frameBuffer)
-    ambientBackdrop.processFrame(frameBuffer)
-}
-
-videoTexture.doOnLayout {
-    ambientBackdrop.updateVideoPosition(
-        videoTexture.left.toFloat(),
-        videoTexture.top.toFloat(),
-        videoTexture.right.toFloat(),
-        videoTexture.bottom.toFloat()
-    )
-}
-
+// Attach to ExoPlayer
 exoPlayer.setVideoTextureView(videoTexture)
-
 ```
+
 
 ## AmbientLightState & Custom Controls
 

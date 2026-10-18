@@ -13,6 +13,7 @@ import android.os.Build
 import android.util.AttributeSet
 import android.view.View
 import androidx.annotation.RequiresApi
+import com.lapcevichme.ambientlight.player.InterceptingTextureView
 
 /**
  * Custom View rendering the dynamic ambient lighting glow.
@@ -225,6 +226,82 @@ class AmbientBackdropView @JvmOverloads constructor(
 
         ambientShader?.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)
         postInvalidateOnAnimation()
+    }
+
+    private var attachedTextureView: InterceptingTextureView? = null
+    private var attachedLayoutListener: OnLayoutChangeListener? = null
+    private var attachedFrameBuffer: Bitmap? = null
+
+    /**
+     * Connects an [InterceptingTextureView] directly to this backdrop for classic Android Views / XML layouts.
+     *
+     * Automatically extracts downsampled frames with zero continuous allocations and keeps spatial
+     * light coordinates synchronized across layout changes.
+     */
+    @JvmOverloads
+    fun attachTextureView(
+        textureView: InterceptingTextureView,
+        downsampleWidth: Int = 128,
+        downsampleHeight: Int = 72
+    ) {
+        detachTextureView()
+        attachedTextureView = textureView
+
+        val buffer = Bitmap.createBitmap(downsampleWidth, downsampleHeight, Bitmap.Config.ARGB_8888)
+        attachedFrameBuffer = buffer
+
+        textureView.onFrameUpdatedListener = { view ->
+            view.getBitmap(buffer)
+            processFrame(buffer)
+        }
+
+        val listener = OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            syncAttachedVideoCoordinates()
+        }
+        attachedLayoutListener = listener
+        textureView.addOnLayoutChangeListener(listener)
+        addOnLayoutChangeListener(listener)
+
+        syncAttachedVideoCoordinates()
+    }
+
+    /**
+     * Detaches the previously connected [InterceptingTextureView] and releases listeners and buffers.
+     */
+    fun detachTextureView() {
+        val textureView = attachedTextureView ?: return
+        attachedLayoutListener?.let { listener ->
+            textureView.removeOnLayoutChangeListener(listener)
+            removeOnLayoutChangeListener(listener)
+        }
+        textureView.onFrameUpdatedListener = null
+        attachedTextureView = null
+        attachedLayoutListener = null
+        attachedFrameBuffer = null
+    }
+
+    private fun syncAttachedVideoCoordinates() {
+        val videoView = attachedTextureView ?: return
+        if (videoView.width <= 0 || videoView.height <= 0 || width <= 0 || height <= 0) {
+            videoView.post {
+                if (attachedTextureView === videoView) {
+                    syncAttachedVideoCoordinates()
+                }
+            }
+            return
+        }
+        val videoLoc = IntArray(2)
+        videoView.getLocationOnScreen(videoLoc)
+
+        val backdropLoc = IntArray(2)
+        getLocationOnScreen(backdropLoc)
+
+        val relLeft = (videoLoc[0] - backdropLoc[0]).toFloat()
+        val relTop = (videoLoc[1] - backdropLoc[1]).toFloat()
+        val relRight = relLeft + videoView.width.toFloat()
+        val relBottom = relTop + videoView.height.toFloat()
+
+        updateVideoPosition(relLeft, relTop, relRight, relBottom)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
