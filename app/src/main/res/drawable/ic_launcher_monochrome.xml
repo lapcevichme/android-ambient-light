@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Top Ray Accent -->
+    <path
+        android:pathData="M44,32 L64,32 L60,35 L48,35 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Bottom Ray Accent -->
+    <path
+        android:pathData="M44,76 L64,76 L60,73 L48,73 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Left Ray Accent -->
+    <path
+        android:pathData="M24,48 L24,60 L27,57 L27,51 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Right Ray Accent -->
+    <path
+        android:pathData="M84,48 L84,60 L81,57 L81,51 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Display Frame -->
+    <path
+        android:pathData="M36,38 h36 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-36 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="#00000000" />
+
+    <!-- Play Triangle -->
+    <path
+        android:pathData="M50.5,48 L60.5,54 L50.5,60 Z"
+        android:fillColor="#FFFFFF" />
+</vector>
