@@ -192,7 +192,7 @@ fun AmbientSandboxScreen() {
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val name = queryDisplayName(context, uri) ?: "Видео из галереи"
+            val name = queryDisplayName(context, uri) ?: context.getString(R.string.gallery_video_default_name)
             customVideoName = name
             if (customVideoUri == uri) {
                 playbackError = null
@@ -237,7 +237,7 @@ fun AmbientSandboxScreen() {
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                playbackError = "Сбой воспроизведения: ${error.errorCodeName}"
+                playbackError = context.getString(R.string.demo_playback_error, error.errorCodeName)
             }
         }
         exoPlayer.addListener(listener)
@@ -395,7 +395,7 @@ fun VideoPlayerControls(
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Default.Settings,
-                                    contentDescription = "Настройки подсветки",
+                                    contentDescription = stringResource(R.string.ambient_settings_desc),
                                     tint = Color.White,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -716,7 +716,7 @@ fun PortraitSandboxView(
                                 .padding(horizontal = 16.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "$playbackError (включите 'Оффлайн демо')",
+                                text = stringResource(R.string.demo_playback_error_hint, playbackError ?: ""),
                                 color = Color(0xFFFF8888),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
@@ -861,10 +861,11 @@ private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdro
 @Composable
 fun MockYouTubeContent(
     title: String,
-    statusText: String = "Воспроизведение",
+    statusText: String = stringResource(R.string.demo_status_playing),
     framesCount: Long = 0L
 ) {
-    val displayTitle = if (title.startsWith("sample_") || title == "Оффлайн демо (Цвета + Letterbox)") {
+    val offlineSampleTitle = stringResource(R.string.demo_sample_offline)
+    val displayTitle = if (title.startsWith("sample_") || title == offlineSampleTitle) {
         "The Most Controversial Idea In Physics"
     } else {
         title
@@ -886,21 +887,24 @@ fun MockYouTubeContent(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Metadata line: @SciencePetr 52 тыс. отметок "Нравится" 2,3 млн просмотров ещё
+        // Metadata line: @lapcevichme 52K likes 2.3M views more
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
+            val channelHandle = stringResource(R.string.mock_channel_handle)
+            val statsText = stringResource(R.string.mock_video_stats)
+            val moreText = stringResource(R.string.mock_more)
             Text(
                 text = buildAnnotatedString {
                     withStyle(SpanStyle(color = Color(0xFFDDDDDD), fontWeight = FontWeight.Medium)) {
-                        append("@SciencePetr  ")
+                        append("$channelHandle  ")
                     }
                     withStyle(SpanStyle(color = Color(0xFFAAAAAA))) {
-                        append("52 тыс. отметок \"Нравится\"  2,3 млн просмотров  ")
+                        append(statsText)
                     }
                     withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) {
-                        append("ещё")
+                        append(moreText)
                     }
                 },
                 fontSize = 12.sp,
@@ -922,7 +926,7 @@ fun MockYouTubeContent(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "$statusText • Обработано кадров: $framesCount",
+                text = stringResource(R.string.demo_frames_processed, statusText, framesCount),
                 fontSize = 11.sp,
                 color = Color(0xFF9E9E9E),
                 fontWeight = FontWeight.Medium
@@ -949,7 +953,7 @@ fun MockYouTubeContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "SP",
+                    text = stringResource(R.string.mock_channel_initials),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
@@ -970,7 +974,7 @@ fun MockYouTubeContent(
                 modifier = Modifier.height(34.dp)
             ) {
                 Text(
-                    text = "Подписаться",
+                    text = stringResource(R.string.mock_subscribe),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -986,7 +990,7 @@ fun MockYouTubeContent(
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Outlined.ThumbUp,
-                        contentDescription = "Нравится",
+                        contentDescription = stringResource(R.string.mock_like),
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
@@ -994,7 +998,7 @@ fun MockYouTubeContent(
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Outlined.ThumbDown,
-                        contentDescription = "Не нравится",
+                        contentDescription = stringResource(R.string.mock_dislike),
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
@@ -1002,7 +1006,7 @@ fun MockYouTubeContent(
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Outlined.Share,
-                        contentDescription = "Поделиться",
+                        contentDescription = stringResource(R.string.mock_share),
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
@@ -1010,7 +1014,7 @@ fun MockYouTubeContent(
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Outlined.BookmarkBorder,
-                        contentDescription = "Сохранить",
+                        contentDescription = stringResource(R.string.mock_save),
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
@@ -1018,7 +1022,7 @@ fun MockYouTubeContent(
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Default.MoreHoriz,
-                        contentDescription = "Ещё",
+                        contentDescription = stringResource(R.string.mock_more_options),
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
@@ -1041,14 +1045,14 @@ fun MockYouTubeContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Комментарии",
+                        text = stringResource(R.string.mock_comments_title),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "5 тыс.",
+                        text = stringResource(R.string.mock_comments_count),
                         color = Color(0xFFAAAAAA),
                         fontSize = 12.sp
                     )
@@ -1089,7 +1093,7 @@ fun MockYouTubeContent(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "I was hooked, wondering why this style felt so familiar.. now come to find you're an ex-veritasium writer! I'm looking...",
+                        text = stringResource(R.string.mock_comment_text),
                         color = Color(0xFFEEEEEE),
                         fontSize = 12.sp,
                         maxLines = 2,

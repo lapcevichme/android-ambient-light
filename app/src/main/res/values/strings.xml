@@ -59,4 +59,26 @@
     <string name="feed_kurzgesagt_meta">Kurzgesagt – In a Nutshell • 14M views • 1 week ago</string>
     <string name="feed_deco_meta">5 days ago</string>
     <string name="feed_more_options">Options</string>
+
+    <!-- Mock Channel and Video Metadata -->
+    <string name="mock_channel_handle">@lapcevichme</string>
+    <string name="mock_channel_initials">LM</string>
+    <string name="mock_subscribe">Subscribe</string>
+    <string name="mock_video_stats">52K likes  2.3M views  </string>
+    <string name="mock_more">more</string>
+    <string name="mock_like">Like</string>
+    <string name="mock_dislike">Dislike</string>
+    <string name="mock_share">Share</string>
+    <string name="mock_save">Save</string>
+    <string name="mock_more_options">More</string>
+    <string name="mock_comments_title">Comments</string>
+    <string name="mock_comments_count">5K</string>
+    <string name="mock_comment_text">Scroll to bottom to select your video</string>
+
+    <!-- Demo Status and Playback Messages -->
+    <string name="demo_frames_processed">%1$s • Frames processed: %2$d</string>
+    <string name="demo_playback_error">Playback failure: %1$s</string>
+    <string name="demo_playback_error_hint">%1$s (enable \'Offline demo\')</string>
+    <string name="gallery_video_default_name">Gallery Video</string>
+    <string name="ambient_settings_desc">Ambient light settings</string>
 </resources>

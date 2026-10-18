@@ -59,4 +59,26 @@
     <string name="feed_kurzgesagt_meta">Kurzgesagt – In a Nutshell • 14 млн • 1 неделю назад</string>
     <string name="feed_deco_meta">5 дней назад</string>
     <string name="feed_more_options">Опции</string>
+
+    <!-- Mock Channel and Video Metadata -->
+    <string name="mock_channel_handle">@lapcevichme</string>
+    <string name="mock_channel_initials">LM</string>
+    <string name="mock_subscribe">Подписаться</string>
+    <string name="mock_video_stats">52 тыс. отметок «Нравится»  2,3 млн просмотров  </string>
+    <string name="mock_more">ещё</string>
+    <string name="mock_like">Нравится</string>
+    <string name="mock_dislike">Не нравится</string>
+    <string name="mock_share">Поделиться</string>
+    <string name="mock_save">Сохранить</string>
+    <string name="mock_more_options">Ещё</string>
+    <string name="mock_comments_title">Комментарии</string>
+    <string name="mock_comments_count">5 тыс.</string>
+    <string name="mock_comment_text">Scroll to bottom to select your video</string>
+
+    <!-- Demo Status and Playback Messages -->
+    <string name="demo_frames_processed">%1$s • Обработано кадров: %2$d</string>
+    <string name="demo_playback_error">Сбой воспроизведения: %1$s</string>
+    <string name="demo_playback_error_hint">%1$s (включите «Оффлайн демо»)</string>
+    <string name="gallery_video_default_name">Видео из галереи</string>
+    <string name="ambient_settings_desc">Настройки подсветки</string>
 </resources>
