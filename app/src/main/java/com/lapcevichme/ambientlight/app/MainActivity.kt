@@ -1,4 +1,4 @@
-package com.lapcevichme.ambientlight
+package com.lapcevichme.ambientlight.app
 
 import android.content.Context
 import android.content.pm.ActivityInfo
@@ -107,13 +107,11 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import com.lapcevichme.ambientlight.app.R
 import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
-import com.lapcevichme.ambientlight.ambient.AmbientSettingsBottomSheet
 import com.lapcevichme.ambientlight.compose.rememberAmbientLightState
 import com.lapcevichme.ambientlight.compose.rememberAmbientVideoConnector
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
-import com.lapcevichme.ambientlight.ui.theme.AmbientLightTheme
+import com.lapcevichme.ambientlight.app.ui.theme.AmbientLightTheme
 
 import androidx.compose.runtime.saveable.rememberSaveable
 
@@ -173,9 +171,9 @@ fun AmbientSandboxScreen() {
     var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
 
     // Playback state
-    var playbackStatus by remember { mutableStateOf(context.getString(R.string.demo_status_loading)) }
-    var playbackError by remember { mutableStateOf<String?>(null) }
-    var framesCount by remember { mutableStateOf(0L) }
+    var playbackStatusRes by remember { mutableIntStateOf(R.string.demo_status_loading) }
+    var playbackErrorCode by remember { mutableStateOf<String?>(null) }
+    var framesCount by remember { mutableLongStateOf(0L) }
 
     // ExoPlayer lifecycle management
     val exoPlayer = remember {
@@ -186,16 +184,19 @@ fun AmbientSandboxScreen() {
     }
 
     val defaultDemoTitle = stringResource(R.string.demo_sample_offline)
+    val defaultGalleryName = stringResource(R.string.gallery_video_default_name)
     val activeVideoTitle = customVideoName ?: defaultDemoTitle
+    val playbackStatus = stringResource(playbackStatusRes)
+    val playbackError = playbackErrorCode?.let { stringResource(R.string.demo_playback_error, it) }
 
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val name = queryDisplayName(context, uri) ?: context.getString(R.string.gallery_video_default_name)
+            val name = queryDisplayName(context, uri) ?: defaultGalleryName
             customVideoName = name
             if (customVideoUri == uri) {
-                playbackError = null
+                playbackErrorCode = null
                 exoPlayer.seekTo(0)
                 exoPlayer.play()
             } else {
@@ -227,17 +228,17 @@ fun AmbientSandboxScreen() {
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                playbackStatus = when (playbackState) {
-                    Player.STATE_IDLE -> context.getString(R.string.demo_status_stopped)
-                    Player.STATE_BUFFERING -> context.getString(R.string.demo_status_buffering)
-                    Player.STATE_READY -> context.getString(R.string.demo_status_playing)
-                    Player.STATE_ENDED -> context.getString(R.string.demo_status_ended)
-                    else -> "—"
+                playbackStatusRes = when (playbackState) {
+                    Player.STATE_IDLE -> R.string.demo_status_stopped
+                    Player.STATE_BUFFERING -> R.string.demo_status_buffering
+                    Player.STATE_READY -> R.string.demo_status_playing
+                    Player.STATE_ENDED -> R.string.demo_status_ended
+                    else -> R.string.demo_status_stopped
                 }
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                playbackError = context.getString(R.string.demo_playback_error, error.errorCodeName)
+                playbackErrorCode = error.errorCodeName
             }
         }
         exoPlayer.addListener(listener)
@@ -247,7 +248,7 @@ fun AmbientSandboxScreen() {
     }
 
     LaunchedEffect(customVideoUri) {
-        playbackError = null
+        playbackErrorCode = null
         backdropView.reset()
         val mediaUri = customVideoUri ?: getOfflineDemoUri(context.packageName)
         exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri))
@@ -644,9 +645,10 @@ fun PortraitSandboxView(
 ) {
     Scaffold(
         containerColor = Color(0xFF0F0F0F)
-    ) { _ ->
+    ) { innerPadding ->
         Column(
             modifier = Modifier
+                .padding(innerPadding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()

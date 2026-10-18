@@ -1,4 +1,4 @@
-package com.lapcevichme.ambientlight
+package com.lapcevichme.ambientlight.app
 
 import org.junit.Test
 

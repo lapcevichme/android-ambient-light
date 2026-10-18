@@ -14,9 +14,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AmbientLight">
         <activity
-            android:name="com.lapcevichme.ambientlight.MainActivity"
+            android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.AmbientLight"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:windowSoftInputMode="adjustResize">

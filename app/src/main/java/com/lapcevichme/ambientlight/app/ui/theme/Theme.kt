@@ -1,4 +1,4 @@
-package com.lapcevichme.ambientlight.ui.theme
+package com.lapcevichme.ambientlight.app.ui.theme
 
 import android.app.Activity
 import android.os.Build
