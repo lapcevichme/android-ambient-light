@@ -1,5 +1,10 @@
 # AmbientLight for Android
 
+[![JitPack](https://jitpack.io/v/lapcevichme/android-ambient-light.svg)](https://jitpack.io/#lapcevichme/android-ambient-light)
+[![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=24)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0%2B-blue.svg?logo=kotlin)](https://kotlinlang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 An ambient light glow effect library for Android video players. Powered by **AGSL Runtime Shaders** (Android 13+) and **Skia Hardware RenderEffect Blur** (Android 12+), ported from [Wessel Kroos's ambient light engine](https://github.com/WesselKroos/youtube-ambilight).
 
 ## Features
@@ -34,7 +39,6 @@ dependencyResolutionManagement {
         maven { url = uri("https://jitpack.io") }
     }
 }
-
 ```
 
 Add the dependency to your module's `build.gradle.kts`:
@@ -43,7 +47,6 @@ Add the dependency to your module's `build.gradle.kts`:
 dependencies {
     implementation("com.github.lapcevichme:android-ambient-light:1.0.0")
 }
-
 ```
 
 ## Quick Start
@@ -84,7 +87,6 @@ fun VideoPlayerScreen(exoPlayer: ExoPlayer) {
         }
     }
 }
-
 ```
 
 ### 2. Classic Android Views / XML
@@ -109,7 +111,6 @@ fun VideoPlayerScreen(exoPlayer: ExoPlayer) {
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp" />
 </FrameLayout>
-
 ```
 
 In your Activity / Fragment:
@@ -152,7 +153,6 @@ fun CustomAmbientControls(state: AmbientLightState) {
         }
     }
 }
-
 ```
 
 ### State Properties Reference
@@ -188,7 +188,6 @@ if (showSettings) {
         onDismissRequest = { showSettings = false }
     )
 }
-
 ```
 
 An explicit overload is also available if you are managing parameters outside of `AmbientLightState`.
@@ -216,7 +215,6 @@ AmbientSettingsBottomSheet(
     onDismissRequest = { showSettings = false },
     colors = materialColors
 )
-
 ```
 
 ## Architecture & Limitations
