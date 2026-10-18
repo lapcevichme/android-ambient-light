@@ -130,6 +130,59 @@ exoPlayer.setVideoTextureView(videoTexture)
 
 ---
 
+## ⚙️ AmbientLightState & Custom Controls
+
+`AmbientLightContainer` is driven by `AmbientLightState`, an observable state holder where all parameters are reactive Compose snapshot states. Any property update immediately reflects in the shader in real time.
+
+You can build your own custom UI (dialogs, sidebars, or settings screens) simply by binding controls to `state`:
+
+```kotlin
+@Composable
+fun CustomAmbientControls(state: AmbientLightState) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Switch(
+            checked = state.isEnabled,
+            onCheckedChange = { state.isEnabled = it }
+        )
+        Slider(
+            value = state.brightness,
+            onValueChange = { state.brightness = it },
+            valueRange = 0.5f..2.5f
+        )
+        Slider(
+            value = state.blurRadius,
+            onValueChange = { state.blurRadius = it },
+            valueRange = 10f..100f
+        )
+        Button(onClick = { state.resetToDefaults() }) {
+            Text("Reset to defaults")
+        }
+    }
+}
+```
+
+### State Properties Reference
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `state.isEnabled` | `Boolean` | `true` | Master toggle to enable or disable ambient lighting |
+| `state.brightness` | `Float` | `1.0f` | Light brightness multiplier (`0.5f` .. `2.5f`) |
+| `state.blurRadius` | `Float` | `50f` | Hardware blur radius (`10f` .. `100f`) |
+| `state.vibrance` | `Float` | `0.0f` | HSV saturation boost curve (`0.0f` .. `1.0f`) |
+| `state.contrast` | `Float` | `1.0f` | Ray contrast factor (`0.5f` .. `2.0f`) |
+| `state.spreadLimit` | `Float` | `0.40f` | Ray reach and distance falloff from video edges (`0.1f` .. `0.8f`) |
+| `state.edgeSize` | `Float` | `0.12f` | Border sample depth for ray-casting (`0.05f` .. `0.25f`) |
+| `state.flickerReduction` | `Int` | `10` | Wessel Kroos temporal smoothing percentage (`0` .. `100`) |
+| `state.isOledMode` | `Boolean` | `false` | Deep black cutoff to save battery and eliminate weak glow on OLEDs |
+| `state.detectLetterbox` | `Boolean` | `true` | Real-time automatic black bar detection (21:9, 4:3) |
+| `state.directionTop` | `Boolean` | `true` | Independent toggle for top glow |
+| `state.directionBottom` | `Boolean` | `true` | Independent toggle for bottom glow |
+| `state.directionLeft` | `Boolean` | `true` | Independent toggle for left glow |
+| `state.directionRight` | `Boolean` | `true` | Independent toggle for right glow |
+| `state.resetToDefaults()`| Method | — | Resets all parameters to recommended default values |
+
+---
+
 ## 🎛️ Settings Bottom Sheet
 
 You can show the authentic YouTube-styled settings sheet with one line:

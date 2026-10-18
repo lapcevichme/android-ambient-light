@@ -6,7 +6,7 @@ import kotlin.math.abs
 /**
  * Bounds representing the detected letterboxing/pillarboxing in normalized [0.0, 1.0] UV coordinates.
  */
-data class CropBounds(
+internal data class CropBounds(
     val top: Float = 0f,
     val bottom: Float = 0f,
     val left: Float = 0f,
@@ -23,7 +23,7 @@ data class CropBounds(
  * 4. Sliding Window Majority Filter: Requires persistent occurrence before shifting target bounds.
  * 5. Deadband: Snaps bars < 3% to full-frame 0.0 to eliminate subpixel fluttering.
  */
-class LetterboxDetector(
+internal class LetterboxDetector(
     private val blackThreshold: Float = 20f / 255f, // ~20 in 8-bit TV/video range
     private val historySize: Int = 16,               // Sliding window size (Kroos' averageHistorySize)
     private val smoothingSpeed: Float = 0.15f        // Smooth reframing factor

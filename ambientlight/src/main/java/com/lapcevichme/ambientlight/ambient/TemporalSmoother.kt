@@ -13,7 +13,7 @@ import androidx.core.graphics.createBitmap
  * Provides smooth color transitions on static or slow scenes while reacting instantly
  * without ghosting or delay during sharp scene cuts or flash events.
  */
-class TemporalSmoother(
+internal class TemporalSmoother(
     var flickerReductionPercent: Int = 50 // 0 to 100%
 ) {
     private var previousPixels: IntArray? = null

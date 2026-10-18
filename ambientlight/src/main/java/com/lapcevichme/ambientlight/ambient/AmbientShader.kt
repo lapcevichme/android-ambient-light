@@ -15,7 +15,7 @@ import org.intellij.lang.annotations.Language
  * Interface defining operations for ambient light shader renderers.
  * Decouples views from API 33-specific [RuntimeShader] implementations.
  */
-interface AmbientShaderDelegate {
+internal interface AmbientShaderDelegate {
     val shader: Shader
     fun updateResolution(width: Float, height: Float)
     fun updateVideoRect(left: Float, top: Float, right: Float, bottom: Float)
@@ -42,7 +42,7 @@ interface AmbientShaderDelegate {
  * 5. Radial distance falloff: smoothly dissolves light into the page background.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-class AmbientShader : AmbientShaderDelegate {
+internal class AmbientShader : AmbientShaderDelegate {
 
     @Language("AGSL")
     private val shaderSource = """
