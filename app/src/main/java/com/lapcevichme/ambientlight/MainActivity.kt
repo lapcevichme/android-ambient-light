@@ -909,6 +909,26 @@ fun MockYouTubeContent(
             )
         }
 
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Live pipeline status indicator
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .background(Color(0xFF4CAF50), CircleShape)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "$statusText • Обработано кадров: $framesCount",
+                fontSize = 11.sp,
+                color = Color(0xFF9E9E9E),
+                fontWeight = FontWeight.Medium
+            )
+        }
+
         Spacer(modifier = Modifier.height(10.dp))
 
         // Channel Info & Actions Row: Avatar + Subscribe pill + Action icon buttons
