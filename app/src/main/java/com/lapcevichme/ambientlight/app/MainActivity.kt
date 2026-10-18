@@ -890,9 +890,10 @@ fun MockYouTubeContent(
     statusText: String = stringResource(R.string.demo_status_playing),
     framesCount: Long = 0L
 ) {
+    val defaultSampleTitle = stringResource(R.string.demo_default_video_title)
     val offlineSampleTitle = stringResource(R.string.demo_sample_offline)
     val displayTitle = if (title.startsWith("sample_") || title == offlineSampleTitle) {
-        "The Most Controversial Idea In Physics"
+        defaultSampleTitle
     } else {
         title
     }

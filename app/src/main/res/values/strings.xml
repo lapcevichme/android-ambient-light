@@ -52,6 +52,7 @@
     <string name="demo_status_playing">Playing</string>
     <string name="demo_status_ended">Ended</string>
     <string name="demo_sample_offline">Offline demo (Colors + Letterbox)</string>
+    <string name="demo_default_video_title">Ambient Light Test Video</string>
 
     <!-- Feed Mock Strings -->
     <string name="feed_kurzgesagt_thumb_headline">WHAT IF?</string>

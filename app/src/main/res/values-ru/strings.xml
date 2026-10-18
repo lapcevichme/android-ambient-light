@@ -52,6 +52,7 @@
     <string name="demo_status_playing">Воспроизведение</string>
     <string name="demo_status_ended">Завершено</string>
     <string name="demo_sample_offline">Оффлайн демо (Цвета + Letterbox)</string>
+    <string name="demo_default_video_title">Тестовое видео Ambient Light</string>
 
     <!-- Feed Mock Strings -->
     <string name="feed_kurzgesagt_thumb_headline">ЧТО ЕСЛИ?</string>
