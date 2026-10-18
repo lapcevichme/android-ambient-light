@@ -1,28 +1,32 @@
-# AmbientLight for Android 🌟
+# AmbientLight for Android
 
-A high-performance ambient light glow effect library for Android video players (YouTube-style Ambient Mode). Powered by **AGSL Runtime Shaders** (Android 13+) and **Skia Hardware RenderEffect Blur** (Android 12+), ported from [Wessel Kroos's ambient light engine](https://github.com/WesselKroos/youtube-ambient-light).
+An ambient light glow effect library for Android video players. Powered by **AGSL Runtime Shaders** (Android 13+) and **Skia Hardware RenderEffect Blur** (Android 12+), ported from [Wessel Kroos's ambient light engine](https://github.com/WesselKroos/youtube-ambilight).
 
----
+## Features
 
-## ✨ Features
+* **Perimeter Ray-Casting**: Samples video borders to project ambient light and rays outward from the edges of the player.
 
-- **🌈 True Perimeter Ray-Casting**: Ambient light and rays emanate directly from the actual borders of the video outward.
-- **⚡ Zero Memory Overhead**: Single preallocated low-res buffer (GC pauses: 0 ms).
-- **🎬 Letterbox & Pillarbox Detection**: Automatically detects and trims black bars (21:9, 4:3, etc.) so glow originates from true video content.
-- **🖤 OLED Pure Blacks Mode**: Suppresses weak glow on dark scenes to save battery and preserve deep blacks.
-- **🧭 Directional Light Masks**: Independent toggles for Top, Bottom, Left, and Right glow directions.
-- **🎨 HSV Vibrance & Contrast**: Non-linear saturation boosting and contrast adjustment based on Wessel Kroos's WebGL shaders.
-- **📱 Broad Compatibility (Android 7.0+ / API 24+)**: Runs everywhere with automatic graceful degradation (high-precision AGSL ray-casting on Android 13+, hardware-filtered Canvas fallback on Android 7.0–12).
-- **🧩 Jetpack Compose & Classic Views Support**: First-class support for Compose (`AmbientLightContainer`) and XML Views (`AmbientBackdropView`).
-- **🎛️ Built-in Settings Sheet**: Ready-to-use YouTube-themed dark monochrome bottom sheet for real-time user customization.
+* **Zero-Allocation Frame Loop**: Reuses a single preallocated `128x72` bitmap buffer for frame capture to avoid garbage collection churn during playback.
 
----
+* **Letterbox & Pillarbox Detection**: Automatically detects and crops out black bars (21:9, 4:3, etc.) in real time so the glow originates from actual video frames.
 
-## 📦 Installation
+* **OLED Cutoff Mode**: Suppresses low-luminance glow on dark scenes to preserve pure black pixels.
+
+* **Directional Masks**: Independent toggles for Top, Bottom, Left, and Right light projection.
+
+* **HSV Vibrance & Contrast**: Non-linear saturation boosting and contrast adjustment ported from Wessel Kroos's WebGL shaders.
+
+* **API 24+ Fallbacks**: Uses AGSL ray-casting on Android 13+, RenderEffect hardware blur on Android 12, and a hardware-filtered Canvas fallback on Android 7.0-11.
+
+* **Compose & Views Interop**: First-class support for Jetpack Compose (`AmbientLightContainer`) and traditional XML layouts (`AmbientBackdropView`).
+
+* **Prebuilt Settings Sheet**: Optional YouTube-styled dark bottom sheet for tweaking shader parameters at runtime.
+
+## Installation
 
 Add JitPack to your root `settings.gradle.kts`:
 
-```kotlin
+```
 dependencyResolutionManagement {
     repositories {
         google()
@@ -30,23 +34,23 @@ dependencyResolutionManagement {
         maven { url = uri("https://jitpack.io") }
     }
 }
+
 ```
 
 Add the dependency to your module's `build.gradle.kts`:
 
-```kotlin
+```
 dependencies {
     implementation("com.github.lapcevichme:android-ambient-light:1.0.0")
 }
+
 ```
 
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Jetpack Compose
 
-```kotlin
+```
 @Composable
 fun VideoPlayerScreen(exoPlayer: ExoPlayer) {
     val ambientState = rememberAmbientLightState()
@@ -80,11 +84,12 @@ fun VideoPlayerScreen(exoPlayer: ExoPlayer) {
         }
     }
 }
+
 ```
 
 ### 2. Classic Android Views / XML
 
-```xml
+```
 <FrameLayout
     android:layout_width="match_parent"
     android:layout_height="320dp">
@@ -104,11 +109,12 @@ fun VideoPlayerScreen(exoPlayer: ExoPlayer) {
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp" />
 </FrameLayout>
+
 ```
 
 In your Activity / Fragment:
 
-```kotlin
+```
 val frameBuffer = Bitmap.createBitmap(128, 72, Bitmap.Config.ARGB_8888)
 
 videoTexture.onFrameUpdatedListener = { view ->
@@ -126,17 +132,16 @@ videoTexture.doOnLayout {
 }
 
 exoPlayer.setVideoTextureView(videoTexture)
+
 ```
 
----
+## AmbientLightState & Custom Controls
 
-## ⚙️ AmbientLightState & Custom Controls
+`AmbientLightContainer` is driven by `AmbientLightState`, an observable state holder backed by Compose snapshot state. Updating any property immediately updates the shader uniforms on the next frame.
 
-`AmbientLightContainer` is driven by `AmbientLightState`, an observable state holder where all parameters are reactive Compose snapshot states. Any property update immediately reflects in the shader in real time.
+You can build your own configuration UI by binding controls directly to `state`:
 
-You can build your own custom UI (dialogs, sidebars, or settings screens) simply by binding controls to `state`:
-
-```kotlin
+```
 @Composable
 fun CustomAmbientControls(state: AmbientLightState) {
     Column(modifier = Modifier.padding(16.dp)) {
@@ -159,35 +164,34 @@ fun CustomAmbientControls(state: AmbientLightState) {
         }
     }
 }
+
 ```
 
 ### State Properties Reference
 
-| Property | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `state.isEnabled` | `Boolean` | `true` | Master toggle to enable or disable ambient lighting |
-| `state.brightness` | `Float` | `1.0f` | Light brightness multiplier (`0.5f` .. `2.5f`) |
-| `state.blurRadius` | `Float` | `50f` | Hardware blur radius (`10f` .. `100f`) |
-| `state.vibrance` | `Float` | `0.0f` | HSV saturation boost curve (`0.0f` .. `1.0f`) |
-| `state.contrast` | `Float` | `1.0f` | Ray contrast factor (`0.5f` .. `2.0f`) |
-| `state.spreadLimit` | `Float` | `0.40f` | Ray reach and distance falloff from video edges (`0.1f` .. `0.8f`) |
-| `state.edgeSize` | `Float` | `0.12f` | Border sample depth for ray-casting (`0.05f` .. `0.25f`) |
-| `state.flickerReduction` | `Int` | `10` | Wessel Kroos temporal smoothing percentage (`0` .. `100`) |
-| `state.isOledMode` | `Boolean` | `false` | Deep black cutoff to save battery and eliminate weak glow on OLEDs |
-| `state.detectLetterbox` | `Boolean` | `true` | Real-time automatic black bar detection (21:9, 4:3) |
-| `state.directionTop` | `Boolean` | `true` | Independent toggle for top glow |
-| `state.directionBottom` | `Boolean` | `true` | Independent toggle for bottom glow |
-| `state.directionLeft` | `Boolean` | `true` | Independent toggle for left glow |
-| `state.directionRight` | `Boolean` | `true` | Independent toggle for right glow |
-| `state.resetToDefaults()`| Method | — | Resets all parameters to recommended default values |
+| Property | Type | Default | Description | 
+| ----- | ----- | ----- | ----- | 
+| `state.isEnabled` | `Boolean` | `true` | Master toggle to enable or disable ambient lighting | 
+| `state.brightness` | `Float` | `1.0f` | Light brightness multiplier (`0.5f` .. `2.5f`) | 
+| `state.blurRadius` | `Float` | `50f` | Hardware blur radius (`10f` .. `100f`) | 
+| `state.vibrance` | `Float` | `0.0f` | HSV saturation boost curve (`0.0f` .. `1.0f`) | 
+| `state.contrast` | `Float` | `1.0f` | Ray contrast factor (`0.5f` .. `2.0f`) | 
+| `state.spreadLimit` | `Float` | `0.40f` | Ray reach and distance falloff from video edges (`0.1f` .. `0.8f`) | 
+| `state.edgeSize` | `Float` | `0.12f` | Border sample depth for ray-casting (`0.05f` .. `0.25f`) | 
+| `state.flickerReduction` | `Int` | `10` | Temporal smoothing percentage (`0` .. `100`) | 
+| `state.isOledMode` | `Boolean` | `false` | Deep black cutoff to eliminate weak glow on OLED panels | 
+| `state.detectLetterbox` | `Boolean` | `true` | Real-time automatic black bar detection (21:9, 4:3) | 
+| `state.directionTop` | `Boolean` | `true` | Independent toggle for top glow | 
+| `state.directionBottom` | `Boolean` | `true` | Independent toggle for bottom glow | 
+| `state.directionLeft` | `Boolean` | `true` | Independent toggle for left glow | 
+| `state.directionRight` | `Boolean` | `true` | Independent toggle for right glow | 
+| `state.resetToDefaults()` | Method | - | Resets all parameters to default values | 
 
----
+## Settings Bottom Sheet
 
-## 🎛️ Settings Bottom Sheet
+If you want a ready-made configuration UI, you can display the built-in bottom sheet:
 
-You can show the authentic YouTube-styled settings sheet with one line:
-
-```kotlin
+```
 var showSettings by remember { mutableStateOf(false) }
 
 if (showSettings) {
@@ -196,15 +200,16 @@ if (showSettings) {
         onDismissRequest = { showSettings = false }
     )
 }
+
 ```
 
-Or configure individual parameters with the explicit overload if you don't use `AmbientLightState`.
+An explicit overload is also available if you are managing parameters outside of `AmbientLightState`.
 
 ### Customizing Theme & Colors (Material 3 / Material You)
 
-By default, the settings sheet uses YouTube's dark monochromatic style (`AmbientSheetColors.Default`). You can customize any color or connect it directly to your app's `MaterialTheme.colorScheme`:
+By default, the settings sheet uses a dark monochromatic palette (`AmbientSheetColors.Default`). You can override individual tokens or map them to your app's `MaterialTheme.colorScheme`:
 
-```kotlin
+```
 val materialColors = AmbientSheetColors(
     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -223,11 +228,16 @@ AmbientSettingsBottomSheet(
     onDismissRequest = { showSettings = false },
     colors = materialColors
 )
+
 ```
 
----
+## Architecture & Limitations
 
-## 📄 License
+* **`TextureView` Requirement**: Because `SurfaceView` renders directly to a hardware compositor layer, reading back frame pixels on every update (via `PixelCopy`) introduces IPC overhead and frame drops. This library uses `InterceptingTextureView` to downsample frames directly into a tiny `128x72` `Bitmap` on the UI thread with minimal latency.
+
+* **DRM / Protected Content**: Secure video playback (Widevine L1) requires a protected hardware surface (`SurfaceView` with `FLAG_SECURE`), which blocks CPU/GPU pixel readback at the OS level. Attempting to capture frames from DRM-protected streams will yield blank black frames, causing the ambient glow to remain off.
+
+## License
 
 MIT License. See [LICENSE](LICENSE) for details.
-Portions derived from [youtube-ambient-light](https://github.com/WesselKroos/youtube-ambient-light) by Wessel Kroos.
+Portions derived from [youtube-ambilight](https://github.com/WesselKroos/youtube-ambilight) by Wessel Kroos.
