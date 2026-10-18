@@ -34,7 +34,6 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -97,23 +96,6 @@ data class AmbientSheetColors(
 ) {
     companion object {
         val Default = AmbientSheetColors()
-
-        /**
-         * Dynamic palette pulling accents from the active Material 3 theme (Material You on Android 12+).
-         */
-        @Composable
-        fun material3(
-            accentColor: Color = MaterialTheme.colorScheme.primary,
-            containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor: Color = MaterialTheme.colorScheme.onSurface,
-            secondaryContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
-        ) = AmbientSheetColors(
-            accentColor = accentColor,
-            containerColor = containerColor,
-            contentColor = contentColor,
-            secondaryContentColor = secondaryContentColor,
-            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-        )
     }
 }
 
