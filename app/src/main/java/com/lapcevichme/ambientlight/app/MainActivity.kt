@@ -1,8 +1,9 @@
 package com.lapcevichme.ambientlight.app
 
+import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -54,14 +55,11 @@ import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import com.lapcevichme.ambientlight.ambient.AmbientSettingsBottomSheet
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -78,8 +76,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,7 +92,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -108,12 +105,14 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
+import com.lapcevichme.ambientlight.ambient.AmbientSettingsBottomSheet
+import com.lapcevichme.ambientlight.app.ui.theme.AmbientLightTheme
 import com.lapcevichme.ambientlight.compose.rememberAmbientLightState
 import com.lapcevichme.ambientlight.compose.rememberAmbientVideoConnector
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
-import com.lapcevichme.ambientlight.app.ui.theme.AmbientLightTheme
-
-import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
+import androidx.core.net.toUri
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -128,7 +127,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun getOfflineDemoUri(packageName: String): Uri =
-    Uri.parse("android.resource://$packageName/${R.raw.sample_ambient}")
+    "android.resource://$packageName/${R.raw.sample_ambient}".toUri()
 
 private fun queryDisplayName(context: Context, uri: Uri): String? {
     if (uri.scheme == "content") {
@@ -153,7 +152,15 @@ private fun queryDisplayName(context: Context, uri: Uri): String? {
     return uri.lastPathSegment
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@SuppressLint("SourceLockedOrientationActivity")
+private fun setPlayerOrientation(activity: Activity, isFullscreen: Boolean) {
+    activity.requestedOrientation = if (isFullscreen) {
+        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    } else {
+        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }
+}
+
 @Composable
 fun AmbientSandboxScreen() {
     val context = LocalContext.current
@@ -212,13 +219,14 @@ fun AmbientSandboxScreen() {
     // Handle Orientation and System Bars for Fullscreen
     DisposableEffect(isFullscreen) {
         activity?.let { act ->
-            val windowInsetsController = WindowCompat.getInsetsController(act.window, act.window.decorView)
+            val windowInsetsController =
+                WindowCompat.getInsetsController(act.window, act.window.decorView)
+            setPlayerOrientation(act, isFullscreen)
             if (isFullscreen) {
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                windowInsetsController.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
             } else {
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 windowInsetsController.show(WindowInsetsCompat.Type.systemBars())
             }
         }
@@ -346,7 +354,7 @@ fun VideoPlayerControls(
     // Auto-hide controls after 3.5 seconds of playback
     LaunchedEffect(showControls, isPlaying, isScrubbing) {
         if (showControls && isPlaying && !isScrubbing) {
-            delay(3500)
+            delay(3500.milliseconds)
             showControls = false
         }
     }
@@ -359,7 +367,7 @@ fun VideoPlayerControls(
                 durationMs = exoPlayer.duration.coerceAtLeast(0L)
             }
             isPlaying = exoPlayer.isPlaying
-            delay(200)
+            delay(200.milliseconds)
         }
     }
 
@@ -439,7 +447,8 @@ fun VideoPlayerControls(
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    val displayCurrent = if (isScrubbing) scrubPositionMs.toLong() else currentPositionMs
+                    val displayCurrent =
+                        if (isScrubbing) scrubPositionMs.toLong() else currentPositionMs
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -457,7 +466,11 @@ fun VideoPlayerControls(
                         if (onEnterFullscreen != null) {
                             Button(
                                 onClick = onEnterFullscreen,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0x66000000)),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(
+                                        0x66000000
+                                    )
+                                ),
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.height(28.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
@@ -468,7 +481,8 @@ fun VideoPlayerControls(
                     }
 
                     val maxSlider = durationMs.coerceAtLeast(1L).toFloat()
-                    val sliderVal = if (isScrubbing) scrubPositionMs else currentPositionMs.toFloat()
+                    val sliderVal =
+                        if (isScrubbing) scrubPositionMs else currentPositionMs.toFloat()
                     Slider(
                         value = sliderVal.coerceIn(0f, maxSlider),
                         onValueChange = {
@@ -576,7 +590,11 @@ fun FullscreenLandscapePlayer(
                     shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.align(Alignment.TopStart)
                 ) {
-                    Text(stringResource(R.string.demo_exit_fullscreen), color = Color.White, fontSize = 13.sp)
+                    Text(
+                        stringResource(R.string.demo_exit_fullscreen),
+                        color = Color.White,
+                        fontSize = 13.sp
+                    )
                 }
 
                 // Top-Right: Ambient Light toggle
@@ -590,7 +608,11 @@ fun FullscreenLandscapePlayer(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text(stringResource(R.string.demo_ambient_label) + " ", color = Color.White, fontSize = 12.sp)
+                        Text(
+                            stringResource(R.string.demo_ambient_label) + " ",
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
                         Switch(
                             checked = isEnabled,
                             onCheckedChange = onToggleEnabled,
@@ -627,7 +649,6 @@ fun FullscreenLandscapePlayer(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PortraitSandboxView(
     backdropView: AmbientBackdropView,
@@ -718,7 +739,10 @@ fun PortraitSandboxView(
                                 .padding(horizontal = 16.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = stringResource(R.string.demo_playback_error_hint, playbackError ?: ""),
+                                text = stringResource(
+                                    R.string.demo_playback_error_hint,
+                                    playbackError
+                                ),
                                 color = Color(0xFFFF8888),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
@@ -899,7 +923,12 @@ fun MockYouTubeContent(
             val moreText = stringResource(R.string.mock_more)
             Text(
                 text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = Color(0xFFDDDDDD), fontWeight = FontWeight.Medium)) {
+                    withStyle(
+                        SpanStyle(
+                            color = Color(0xFFDDDDDD),
+                            fontWeight = FontWeight.Medium
+                        )
+                    ) {
                         append("$channelHandle  ")
                     }
                     withStyle(SpanStyle(color = Color(0xFFAAAAAA))) {
@@ -1197,11 +1226,18 @@ fun SuggestedVideosFeed(
                 rotate(degrees = -24f, pivot = planetCenter) {
                     drawOval(
                         brush = Brush.linearGradient(
-                            colors = listOf(Color(0x88FDE047), Color(0x77F59E0B), Color(0x33F59E0B)),
+                            colors = listOf(
+                                Color(0x88FDE047),
+                                Color(0x77F59E0B),
+                                Color(0x33F59E0B)
+                            ),
                             start = Offset(planetCenter.x - planetRadius * 2.2f, planetCenter.y),
                             end = Offset(planetCenter.x + planetRadius * 2.2f, planetCenter.y)
                         ),
-                        topLeft = Offset(planetCenter.x - planetRadius * 2.1f, planetCenter.y - planetRadius * 0.32f),
+                        topLeft = Offset(
+                            planetCenter.x - planetRadius * 2.1f,
+                            planetCenter.y - planetRadius * 0.32f
+                        ),
                         size = Size(planetRadius * 4.2f, planetRadius * 0.64f),
                         style = Stroke(width = 8.dp.toPx())
                     )
@@ -1211,7 +1247,10 @@ fun SuggestedVideosFeed(
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFF0B192C)),
-                        center = Offset(planetCenter.x - planetRadius * 0.3f, planetCenter.y - planetRadius * 0.3f),
+                        center = Offset(
+                            planetCenter.x - planetRadius * 0.3f,
+                            planetCenter.y - planetRadius * 0.3f
+                        ),
                         radius = planetRadius * 1.2f
                     ),
                     radius = planetRadius,
@@ -1222,21 +1261,31 @@ fun SuggestedVideosFeed(
                 rotate(degrees = -24f, pivot = planetCenter) {
                     drawArc(
                         brush = Brush.linearGradient(
-                            colors = listOf(Color(0xEEFDE047), Color(0xDDF59E0B), Color(0x88F59E0B)),
+                            colors = listOf(
+                                Color(0xEEFDE047),
+                                Color(0xDDF59E0B),
+                                Color(0x88F59E0B)
+                            ),
                             start = Offset(planetCenter.x - planetRadius * 2.2f, planetCenter.y),
                             end = Offset(planetCenter.x + planetRadius * 2.2f, planetCenter.y)
                         ),
                         startAngle = 0f,
                         sweepAngle = 180f,
                         useCenter = false,
-                        topLeft = Offset(planetCenter.x - planetRadius * 2.1f, planetCenter.y - planetRadius * 0.32f),
+                        topLeft = Offset(
+                            planetCenter.x - planetRadius * 2.1f,
+                            planetCenter.y - planetRadius * 0.32f
+                        ),
                         size = Size(planetRadius * 4.2f, planetRadius * 0.64f),
                         style = Stroke(width = 8.dp.toPx())
                     )
                 }
 
                 // Small orbiting moon
-                val moonCenter = Offset(planetCenter.x - planetRadius * 1.35f, planetCenter.y - planetRadius * 0.8f)
+                val moonCenter = Offset(
+                    planetCenter.x - planetRadius * 1.35f,
+                    planetCenter.y - planetRadius * 0.8f
+                )
                 drawCircle(
                     color = Color(0xFFE2E8F0),
                     radius = 5.dp.toPx(),
@@ -1363,7 +1412,11 @@ fun SuggestedVideosFeed(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("♪", color = Color(0xFFAAAAAA), fontSize = 12.sp)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(stringResource(R.string.feed_deco_meta), color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                    Text(
+                        stringResource(R.string.feed_deco_meta),
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 12.sp
+                    )
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
