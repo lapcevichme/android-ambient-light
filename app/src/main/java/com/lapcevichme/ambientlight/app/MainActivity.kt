@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -46,6 +47,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -53,6 +55,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -60,6 +63,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -67,6 +72,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -129,8 +135,36 @@ class MainActivity : ComponentActivity() {
 private fun getOfflineDemoUri(packageName: String): Uri =
     "android.resource://$packageName/${R.raw.sample_ambient}".toUri()
 
+private fun isNumericOrCameraId(name: String): Boolean {
+    val stripped = name.replace(" ", "").replace("-", "").replace("_", "")
+    if (stripped.all { it.isDigit() }) return true
+    if (name.startsWith("VID", ignoreCase = true) && name.drop(3).trim(' ', '_', '-').all { it.isDigit() }) return true
+    if (name.startsWith("VID_", ignoreCase = true)) return true
+    if (name.startsWith("IMG_", ignoreCase = true)) return true
+    if (name.startsWith("PXL_", ignoreCase = true)) return true
+    return false
+}
+
 private fun queryDisplayName(context: Context, uri: Uri): String? {
-    if (uri.scheme == "content") {
+    // 1. Try reading embedded metadata title from MP4 / media container
+    val retriever = MediaMetadataRetriever()
+    try {
+        retriever.setDataSource(context, uri)
+        val embeddedTitle = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+        if (!embeddedTitle.isNullOrBlank() && !isNumericOrCameraId(embeddedTitle)) {
+            return embeddedTitle.trim()
+        }
+    } catch (_: Throwable) {
+        // Fall back to filename
+    } finally {
+        try {
+            retriever.release()
+        } catch (_: Throwable) {
+        }
+    }
+
+    // 2. Query DISPLAY_NAME from ContentResolver
+    val rawName = if (uri.scheme == "content") {
         try {
             context.contentResolver.query(
                 uri,
@@ -142,14 +176,28 @@ private fun queryDisplayName(context: Context, uri: Uri): String? {
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (nameIndex != -1 && cursor.moveToFirst()) {
                     val name = cursor.getString(nameIndex)
-                    if (!name.isNullOrBlank()) return name
-                }
+                    if (!name.isNullOrBlank()) name else null
+                } else null
             }
         } catch (_: Throwable) {
-            // Fall back to URI segment
+            null
         }
+    } else {
+        uri.lastPathSegment
+    } ?: uri.lastPathSegment
+
+    val cleanName = rawName
+        ?.substringBeforeLast('.')
+        ?.replace('_', ' ')
+        ?.trim()
+        ?.ifBlank { null } ?: return null
+
+    // 3. Filter out pure digits (e.g. PhotoPicker ID "1000000042") or camera defaults ("VID_2024...")
+    if (isNumericOrCameraId(cleanName)) {
+        return null
     }
-    return uri.lastPathSegment
+
+    return cleanName
 }
 
 @SuppressLint("SourceLockedOrientationActivity")
@@ -312,7 +360,8 @@ fun AmbientSandboxScreen() {
             onResetToSample = {
                 customVideoUri = null
                 customVideoName = null
-            }
+            },
+            onUpdateVideoTitle = { customVideoName = it }
         )
     }
 
@@ -662,14 +711,38 @@ fun PortraitSandboxView(
     framesCount: Long,
     isCustomVideo: Boolean,
     onPickGalleryVideo: () -> Unit,
-    onResetToSample: () -> Unit
+    onResetToSample: () -> Unit,
+    onUpdateVideoTitle: (String) -> Unit
 ) {
+    var isCardMode by rememberSaveable { mutableStateOf(false) }
+    var showEditTitleDialog by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(isCardMode) {
+        textureView.post { updateVideoCoordinates(textureView, backdropView) }
+    }
+
+    if (showEditTitleDialog) {
+        val defaultSampleTitle = stringResource(R.string.demo_default_video_title)
+        val offlineSampleTitle = stringResource(R.string.demo_sample_offline)
+        val initialDialogTitle = if (activeVideoTitle.startsWith("sample_") || activeVideoTitle == offlineSampleTitle) {
+            defaultSampleTitle
+        } else {
+            activeVideoTitle
+        }
+        EditVideoTitleDialog(
+            initialTitle = initialDialogTitle,
+            onDismissRequest = { showEditTitleDialog = false },
+            onConfirm = onUpdateVideoTitle
+        )
+    }
+
     Scaffold(
-        containerColor = Color(0xFF0F0F0F)
+        containerColor = Color(0xFF0F0F0F),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
         Column(
             modifier = Modifier
-                .padding(innerPadding)
+                .padding(bottom = innerPadding.calculateBottomPadding())
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
@@ -699,16 +772,27 @@ fun PortraitSandboxView(
                 ) {
                     // Generous headroom extending behind status bar so upward ambient glow rays illuminate behind clock and battery icons
                     Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-                    Spacer(modifier = Modifier.height(16.dp))
+                    if (isCardMode) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
 
-                    // Video Player (sharp square corners with padding, ambient light shining from all 4 sides)
-                    Box(
-                        modifier = Modifier
+                    // Video Player (edge-to-edge full width or card mode with rounded corners)
+                    val playerModifier = if (isCardMode) {
+                        Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .clip(RoundedCornerShape(0.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.Black)
                             .aspectRatio(16f / 9f)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black)
+                            .aspectRatio(16f / 9f)
+                    }
+
+                    Box(
+                        modifier = playerModifier
                     ) {
                         AndroidView(
                             factory = {
@@ -754,8 +838,7 @@ fun PortraitSandboxView(
                     // Mock YouTube Interface with Translucent Frosted Glass UI (Physically lit by AGSL backdrop)
                     MockYouTubeContent(
                         title = activeVideoTitle,
-                        statusText = playbackStatus,
-                        framesCount = framesCount
+                        onTitleClick = { showEditTitleDialog = true }
                     )
                 }
             }
@@ -824,8 +907,47 @@ fun PortraitSandboxView(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
-                        modifier = Modifier.padding(bottom = 10.dp)
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
+
+                    // Player Presentation Mode Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = stringResource(R.string.demo_player_mode_title),
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isCardMode) stringResource(R.string.demo_player_mode_card_desc)
+                                else stringResource(R.string.demo_player_mode_edge_desc),
+                                color = Color(0xFFAAAAAA),
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                        Switch(
+                            checked = isCardMode,
+                            onCheckedChange = { isCardMode = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF1E1E1E),
+                                checkedTrackColor = Color.White,
+                                checkedBorderColor = Color.Transparent,
+                                uncheckedThumbColor = Color(0xFFAAAAAA),
+                                uncheckedTrackColor = Color(0x28FFFFFF),
+                                uncheckedBorderColor = Color(0x33FFFFFF)
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     Button(
                         onClick = onPickGalleryVideo,
                         colors = ButtonDefaults.buttonColors(
@@ -857,6 +979,24 @@ fun PortraitSandboxView(
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(Color(0xFF4CAF50), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.demo_frames_processed, playbackStatus, framesCount),
+                            fontSize = 11.sp,
+                            color = Color(0xFF9E9E9E),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
 
@@ -885,10 +1025,72 @@ private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdro
 }
 
 @Composable
+fun EditVideoTitleDialog(
+    initialTitle: String,
+    onDismissRequest: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(initialTitle) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = {
+            Text(
+                text = stringResource(R.string.edit_video_title),
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(stringResource(R.string.edit_video_title_hint)) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color(0x66FFFFFF),
+                    focusedLabelColor = Color.White,
+                    unfocusedLabelColor = Color(0xFFAAAAAA)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (text.isNotBlank()) {
+                        onConfirm(text.trim())
+                    }
+                    onDismissRequest()
+                }
+            ) {
+                Text(
+                    text = stringResource(R.string.edit_video_title_save),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(
+                    text = stringResource(R.string.edit_video_title_cancel),
+                    color = Color(0xFFAAAAAA)
+                )
+            }
+        },
+        containerColor = Color(0xFF242424),
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
 fun MockYouTubeContent(
     title: String,
-    statusText: String = stringResource(R.string.demo_status_playing),
-    framesCount: Long = 0L
+    onTitleClick: (() -> Unit)? = null
 ) {
     val defaultSampleTitle = stringResource(R.string.demo_default_video_title)
     val offlineSampleTitle = stringResource(R.string.demo_sample_offline)
@@ -901,41 +1103,68 @@ fun MockYouTubeContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
-        // Video Title (matching YouTube screenshot)
-        Text(
-            text = displayTitle,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            lineHeight = 24.sp
-        )
+        // Video Title (matching YouTube screenshot, tap to edit)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(enabled = onTitleClick != null) { onTitleClick?.invoke() }
+                .padding(vertical = 2.dp)
+        ) {
+            Text(
+                text = displayTitle,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                lineHeight = 24.sp,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (onTitleClick != null) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = stringResource(R.string.edit_video_title),
+                    tint = Color(0x66FFFFFF),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Metadata line: @lapcevichme 52K likes 2.3M views more
+        // Metadata line: @lapcevichme  52K likes  2.3M views  7d ago  more
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
             val channelHandle = stringResource(R.string.mock_channel_handle)
-            val statsText = stringResource(R.string.mock_video_stats)
+            val likesText = stringResource(R.string.mock_likes)
+            val viewsText = stringResource(R.string.mock_views)
+            val dateText = stringResource(R.string.mock_date)
             val moreText = stringResource(R.string.mock_more)
             Text(
                 text = buildAnnotatedString {
                     withStyle(
                         SpanStyle(
-                            color = Color(0xFFDDDDDD),
-                            fontWeight = FontWeight.Medium
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
                         )
                     ) {
-                        append("$channelHandle  ")
+                        append(channelHandle)
                     }
                     withStyle(SpanStyle(color = Color(0xFFAAAAAA))) {
-                        append(statsText)
+                        append("  ")
+                        append(likesText)
+                        append("  ")
+                        append(viewsText)
+                        append("  ")
+                        append(dateText)
+                        append("  ")
                     }
-                    withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) {
+                    withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Bold)) {
                         append(moreText)
                     }
                 },
@@ -945,27 +1174,7 @@ fun MockYouTubeContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Live pipeline status indicator
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(Color(0xFF4CAF50), CircleShape)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.demo_frames_processed, statusText, framesCount),
-                fontSize = 11.sp,
-                color = Color(0xFF9E9E9E),
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Channel Info & Actions Row: Avatar + Subscribe pill + Action icon buttons
         Row(
@@ -988,7 +1197,7 @@ fun MockYouTubeContent(
                     text = stringResource(R.string.mock_channel_initials),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    fontSize = 13.sp
                 )
             }
 
@@ -1017,14 +1226,14 @@ fun MockYouTubeContent(
             // Action Icons Row: Like, Dislike, Share, Save, More
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = Icons.Outlined.ThumbUp,
                         contentDescription = stringResource(R.string.mock_like),
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
@@ -1032,7 +1241,7 @@ fun MockYouTubeContent(
                         imageVector = Icons.Outlined.ThumbDown,
                         contentDescription = stringResource(R.string.mock_dislike),
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
@@ -1040,7 +1249,7 @@ fun MockYouTubeContent(
                         imageVector = Icons.Outlined.Share,
                         contentDescription = stringResource(R.string.mock_share),
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
@@ -1048,7 +1257,7 @@ fun MockYouTubeContent(
                         imageVector = Icons.Outlined.BookmarkBorder,
                         contentDescription = stringResource(R.string.mock_save),
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 IconButton(onClick = {}, modifier = Modifier.size(36.dp)) {
@@ -1056,7 +1265,7 @@ fun MockYouTubeContent(
                         imageVector = Icons.Default.MoreHoriz,
                         contentDescription = stringResource(R.string.mock_more_options),
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
@@ -1064,16 +1273,14 @@ fun MockYouTubeContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Comments Preview Card (Translucent frosted card, physically lit by ambient light)
+        // Comments Preview Card (matching YouTube screenshot)
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0x22FFFFFF)),
-            border = BorderStroke(1.dp, Color(0x18FFFFFF)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF212121)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -1088,30 +1295,12 @@ fun MockYouTubeContent(
                         color = Color(0xFFAAAAAA),
                         fontSize = 12.sp
                     )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 12.dp, height = 4.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFDDDDDD))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(width = 4.dp, height = 4.dp)
-                                .clip(CircleShape)
-                                .background(Color(0x66FFFFFF))
-                        )
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Box(

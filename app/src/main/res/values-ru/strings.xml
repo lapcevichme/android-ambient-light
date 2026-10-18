@@ -40,6 +40,9 @@
     <string name="demo_quick_settings">Параметры подсветки (Ambient Mode)</string>
     <string name="demo_quick_settings_action">Настроить →</string>
     <string name="demo_video_source_title">ИСТОЧНИК ВИДЕО (ДЕМО-ПЛЕЕР)</string>
+    <string name="demo_player_mode_title">Круговое 360° свечение</string>
+    <string name="demo_player_mode_card_desc">Карточка с отступами и скруглениями</string>
+    <string name="demo_player_mode_edge_desc">Как в YouTube (на всю ширину экрана)</string>
     <string name="demo_pick_gallery">📁 Выбрать видео из галереи</string>
     <string name="demo_pick_gallery_another">📁 Выбрать другое видео из галереи</string>
     <string name="demo_return_sample">🔄 Вернуться к тестовому видео</string>
@@ -62,10 +65,12 @@
     <string name="feed_more_options">Опции</string>
 
     <!-- Mock Channel and Video Metadata -->
-    <string name="mock_channel_handle">@lapcevichme</string>
+    <string name="mock_channel_handle">\@lapcevichme</string>
     <string name="mock_channel_initials">LM</string>
     <string name="mock_subscribe">Подписаться</string>
-    <string name="mock_video_stats">52 тыс. отметок «Нравится»  2,3 млн просмотров  </string>
+    <string name="mock_likes">52 тыс. лайков</string>
+    <string name="mock_views">2,3 млн просмотров</string>
+    <string name="mock_date">7 дн. назад</string>
     <string name="mock_more">ещё</string>
     <string name="mock_like">Нравится</string>
     <string name="mock_dislike">Не нравится</string>
@@ -80,6 +85,10 @@
     <string name="demo_frames_processed">%1$s • Обработано кадров: %2$d</string>
     <string name="demo_playback_error">Сбой воспроизведения: %1$s</string>
     <string name="demo_playback_error_hint">%1$s (включите «Оффлайн демо»)</string>
-    <string name="gallery_video_default_name">Видео из галереи</string>
+    <string name="gallery_video_default_name">Пользовательское видео</string>
     <string name="ambient_settings_desc">Настройки подсветки</string>
+    <string name="edit_video_title">Название видео</string>
+    <string name="edit_video_title_hint">Введите название для демо</string>
+    <string name="edit_video_title_save">Сохранить</string>
+    <string name="edit_video_title_cancel">Отмена</string>
 </resources>
