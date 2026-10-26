@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -12,6 +14,7 @@ import android.graphics.Shader
 import android.os.Build
 import android.util.AttributeSet
 import android.view.View
+import android.view.View.OnLayoutChangeListener
 import androidx.annotation.RequiresApi
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
 
@@ -32,11 +35,27 @@ class AmbientBackdropView @JvmOverloads constructor(
     private var ambientShader: AmbientShaderDelegate? = null
     private val shaderPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
-    // Fallback drawing structures
-    private var lastFrameBitmap: Bitmap? = null
+    // Fallback drawing structures for legacy Android (API 24-32)
+    private val fallbackBufferWidth = 24
+    private val fallbackBufferHeight = 14
+    private val fallbackMargin = 2
+    private val fallbackBuffer = Bitmap.createBitmap(fallbackBufferWidth, fallbackBufferHeight, Bitmap.Config.ARGB_8888)
+    private val fallbackCanvas = Canvas(fallbackBuffer)
+    private val fallbackInnerDst = Rect(
+        fallbackMargin,
+        fallbackMargin,
+        fallbackBufferWidth - fallbackMargin,
+        fallbackBufferHeight - fallbackMargin
+    )
+    private val fallbackScalePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val fallbackPixels = IntArray(fallbackBufferWidth * fallbackBufferHeight)
+    private val fallbackBlurTemp = IntArray(fallbackBufferWidth * fallbackBufferHeight)
+
     private val fallbackSrcRect = Rect()
     private val fallbackDstRect = RectF()
     private val fallbackPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val fallbackColorMatrix = ColorMatrix()
+    private val tempColorMatrix = ColorMatrix()
 
     private var hasValidFrame = false
     var framesProcessed: Long = 0
@@ -55,6 +74,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateSpreadLimit(value)
+            updateFallbackGeometry()
             postInvalidateOnAnimation()
         }
 
@@ -72,6 +92,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateBrightness(value)
+            updateFallbackColorMatrix()
             postInvalidateOnAnimation()
         }
 
@@ -79,6 +100,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateVibrance(value)
+            updateFallbackColorMatrix()
             postInvalidateOnAnimation()
         }
 
@@ -86,6 +108,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateContrast(value)
+            updateFallbackColorMatrix()
             postInvalidateOnAnimation()
         }
 
@@ -115,6 +138,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     private fun syncDirections() {
         ambientShader?.updateDirections(directionTop, directionRight, directionBottom, directionLeft)
+        updateFallbackGeometry()
         postInvalidateOnAnimation()
     }
 
@@ -136,6 +160,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateOledMode(value)
+            updateFallbackAlpha()
             postInvalidateOnAnimation()
         }
 
@@ -173,6 +198,8 @@ class AmbientBackdropView @JvmOverloads constructor(
             initShader()
         }
         updateBlurEffect()
+        updateFallbackColorMatrix()
+        updateFallbackAlpha()
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
@@ -225,6 +252,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         videoNormBottom = (pixelBottom / h).coerceIn(0f, 1f)
 
         ambientShader?.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)
+        updateFallbackGeometry()
         postInvalidateOnAnimation()
     }
 
@@ -308,10 +336,162 @@ class AmbientBackdropView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && h > 0) {
             ambientShader?.updateResolution(w.toFloat(), h.toFloat())
-            fallbackDstRect.set(0f, 0f, w.toFloat(), h.toFloat())
             updateBlurEffect()
             if (lastPixelLeft >= 0f) {
                 updateVideoPosition(lastPixelLeft, lastPixelTop, lastPixelRight, lastPixelBottom)
+            } else {
+                updateFallbackGeometry()
+            }
+        }
+    }
+
+    private fun updateFallbackGeometry() {
+        if (lastPixelLeft < 0f || width <= 0 || height <= 0) {
+            fallbackDstRect.set(0f, 0f, width.toFloat(), height.toFloat())
+            return
+        }
+
+        val vWidth = (lastPixelRight - lastPixelLeft).coerceAtLeast(1f)
+        val vHeight = (lastPixelBottom - lastPixelTop).coerceAtLeast(1f)
+
+        val spreadX = vWidth * spreadLimit
+        val spreadY = vHeight * spreadLimit
+
+        val left = if (directionLeft) lastPixelLeft - spreadX else lastPixelLeft
+        val top = if (directionTop) lastPixelTop - spreadY else lastPixelTop
+        val right = if (directionRight) lastPixelRight + spreadX else lastPixelRight
+        val bottom = if (directionBottom) lastPixelBottom + spreadY else lastPixelBottom
+
+        fallbackDstRect.set(left, top, right, bottom)
+    }
+
+    private fun updateFallbackColorMatrix() {
+        fallbackColorMatrix.reset()
+
+        // 1. Contrast (centered at 128)
+        val c = contrast
+        if (c != 1.0f) {
+            val translate = (1f - c) * 128f
+            tempColorMatrix.set(floatArrayOf(
+                c, 0f, 0f, 0f, translate,
+                0f, c, 0f, 0f, translate,
+                0f, 0f, c, 0f, translate,
+                0f, 0f, 0f, 1f, 0f
+            ))
+            fallbackColorMatrix.postConcat(tempColorMatrix)
+        }
+
+        // 2. Vibrance / Saturation
+        if (vibrance != 0.0f) {
+            val sat = (1f + vibrance * 0.7f).coerceAtLeast(0f)
+            tempColorMatrix.setSaturation(sat)
+            fallbackColorMatrix.postConcat(tempColorMatrix)
+        }
+
+        // 3. Brightness
+        if (brightness != 1.0f) {
+            val b = brightness.coerceAtLeast(0f)
+            tempColorMatrix.setScale(b, b, b, 1f)
+            fallbackColorMatrix.postConcat(tempColorMatrix)
+        }
+
+        fallbackPaint.colorFilter = ColorMatrixColorFilter(fallbackColorMatrix)
+    }
+
+    private fun updateFallbackAlpha() {
+        if (!isOledMode) {
+            fallbackPaint.alpha = 255
+            return
+        }
+        val lum = (0.2126f * lastAvgR + 0.7152f * lastAvgG + 0.0722f * lastAvgB) / 255f
+        if (lum < 0.05f) {
+            val factor = (lum / 0.05f).coerceIn(0f, 1f)
+            fallbackPaint.alpha = (255 * factor).toInt()
+        } else {
+            fallbackPaint.alpha = 255
+        }
+    }
+
+    private fun processFallbackFrame(smoothed: Bitmap, crop: CropBounds) {
+        val srcL = (crop.left * smoothed.width).toInt().coerceIn(0, smoothed.width - 1)
+        val srcT = (crop.top * smoothed.height).toInt().coerceIn(0, smoothed.height - 1)
+        val srcR = ((1f - crop.right) * smoothed.width).toInt().coerceIn(srcL + 1, smoothed.width)
+        val srcB = ((1f - crop.bottom) * smoothed.height).toInt().coerceIn(srcT + 1, smoothed.height)
+        fallbackSrcRect.set(srcL, srcT, srcR, srcB)
+
+        // Clear buffer with transparent background
+        fallbackBuffer.eraseColor(Color.TRANSPARENT)
+
+        // Scale downsampled cropped video frame into inner rectangle (leaving 2px transparent border)
+        fallbackCanvas.drawBitmap(smoothed, fallbackSrcRect, fallbackInnerDst, fallbackScalePaint)
+
+        // Perform fast 2-pass box blur to softly blend pixel blocks and feather outer alpha
+        fallbackBuffer.getPixels(fallbackPixels, 0, fallbackBufferWidth, 0, 0, fallbackBufferWidth, fallbackBufferHeight)
+        fastBoxBlur(fallbackPixels, fallbackBlurTemp, fallbackBufferWidth, fallbackBufferHeight)
+        fastBoxBlur(fallbackPixels, fallbackBlurTemp, fallbackBufferWidth, fallbackBufferHeight)
+        fallbackBuffer.setPixels(fallbackPixels, 0, fallbackBufferWidth, 0, 0, fallbackBufferWidth, fallbackBufferHeight)
+    }
+
+    private fun fastBoxBlur(pixels: IntArray, temp: IntArray, w: Int, h: Int) {
+        // Horizontal pass
+        for (y in 0 until h) {
+            val rowOffset = y * w
+            for (x in 0 until w) {
+                var r = 0; var g = 0; var b = 0; var a = 0; var count = 0
+                for (dx in -1..1) {
+                    val nx = x + dx
+                    if (nx in 0 until w) {
+                        val p = pixels[rowOffset + nx]
+                        a += (p ushr 24) and 0xFF
+                        r += (p ushr 16) and 0xFF
+                        g += (p ushr 8) and 0xFF
+                        b += p and 0xFF
+                        count++
+                    }
+                }
+                temp[rowOffset + x] = ((a / count) shl 24) or ((r / count) shl 16) or ((g / count) shl 8) or (b / count)
+            }
+        }
+        // Vertical pass
+        for (y in 0 until h) {
+            val rowOffset = y * w
+            for (x in 0 until w) {
+                // Ensure outermost 1px perimeter stays 0 alpha (feathering to transparent)
+                if (x == 0 || x == w - 1 || y == 0 || y == h - 1) {
+                    pixels[rowOffset + x] = 0
+                    continue
+                }
+                // Directional suppression
+                if (!directionTop && y < fallbackMargin + 2) {
+                    pixels[rowOffset + x] = 0
+                    continue
+                }
+                if (!directionBottom && y >= h - fallbackMargin - 2) {
+                    pixels[rowOffset + x] = 0
+                    continue
+                }
+                if (!directionLeft && x < fallbackMargin + 2) {
+                    pixels[rowOffset + x] = 0
+                    continue
+                }
+                if (!directionRight && x >= w - fallbackMargin - 2) {
+                    pixels[rowOffset + x] = 0
+                    continue
+                }
+
+                var r = 0; var g = 0; var b = 0; var a = 0; var count = 0
+                for (dy in -1..1) {
+                    val ny = y + dy
+                    if (ny in 0 until h) {
+                        val p = temp[ny * w + x]
+                        a += (p ushr 24) and 0xFF
+                        r += (p ushr 16) and 0xFF
+                        g += (p ushr 8) and 0xFF
+                        b += p and 0xFF
+                        count++
+                    }
+                }
+                pixels[rowOffset + x] = ((a / count) shl 24) or ((r / count) shl 16) or ((g / count) shl 8) or (b / count)
             }
         }
     }
@@ -332,9 +512,7 @@ class AmbientBackdropView @JvmOverloads constructor(
             shader.updateTexture(smoothed)
             hasValidFrame = true
         } else {
-            // Fallback path: copy bitmap reference for direct canvas scaling
-            lastFrameBitmap = smoothed
-            fallbackSrcRect.set(0, 0, smoothed.width, smoothed.height)
+            processFallbackFrame(smoothed, crop)
             hasValidFrame = true
         }
 
@@ -349,7 +527,9 @@ class AmbientBackdropView @JvmOverloads constructor(
     private var lastAvgB = 40
 
     private fun computeAverageColor(bitmap: Bitmap) {
-        val listener = onDominantColorListener ?: return
+        val needsListener = onDominantColorListener != null
+        if (!needsListener && !isOledMode) return
+
         var sumR = 0L
         var sumG = 0L
         var sumB = 0L
@@ -371,19 +551,22 @@ class AmbientBackdropView @JvmOverloads constructor(
         val targetG = (sumG / total).toInt().coerceIn(0, 255)
         val targetB = (sumB / total).toInt().coerceIn(0, 255)
 
-        // Exponential smoothing for dominant color to prevent Compose shadow flickering during flashes
         val smoothedR = (lastAvgR + (targetR - lastAvgR) * 0.2f).toInt()
         val smoothedG = (lastAvgG + (targetG - lastAvgG) * 0.2f).toInt()
         val smoothedB = (lastAvgB + (targetB - lastAvgB) * 0.2f).toInt()
 
-        if (kotlin.math.abs(smoothedR - lastAvgR) >= 2 ||
+        val hasChanged = kotlin.math.abs(smoothedR - lastAvgR) >= 2 ||
             kotlin.math.abs(smoothedG - lastAvgG) >= 2 ||
             kotlin.math.abs(smoothedB - lastAvgB) >= 2
-        ) {
-            lastAvgR = smoothedR
-            lastAvgG = smoothedG
-            lastAvgB = smoothedB
-            listener(Color.rgb(smoothedR, smoothedG, smoothedB))
+
+        lastAvgR = smoothedR
+        lastAvgG = smoothedG
+        lastAvgB = smoothedB
+
+        updateFallbackAlpha()
+
+        if (hasChanged) {
+            onDominantColorListener?.invoke(Color.rgb(smoothedR, smoothedG, smoothedB))
         }
     }
 
@@ -405,10 +588,8 @@ class AmbientBackdropView @JvmOverloads constructor(
         if (shader != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), shaderPaint)
         } else {
-            val bitmap = lastFrameBitmap
-            if (bitmap != null && !bitmap.isRecycled) {
-                fallbackDstRect.set(0f, 0f, width.toFloat(), height.toFloat())
-                canvas.drawBitmap(bitmap, fallbackSrcRect, fallbackDstRect, fallbackPaint)
+            if (fallbackDstRect.width() > 0f && fallbackDstRect.height() > 0f) {
+                canvas.drawBitmap(fallbackBuffer, null, fallbackDstRect, fallbackPaint)
             }
         }
     }
