@@ -51,7 +51,7 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```
 dependencies {
-    implementation("com.github.lapcevichme:android-ambient-light:1.0.0")
+    implementation("com.github.lapcevichme:android-ambient-light:1.0.1")
 }
 ```
 
