@@ -226,7 +226,7 @@ fun AmbientSandboxScreen() {
     // Ambient settings state
     val ambientState = rememberAmbientLightState(
         initialSpreadLimit = 0.55f,
-        initialFlickerReduction = 50
+        initialFlickerReduction = 10
     )
 
     var customVideoUri by rememberSaveable { mutableStateOf<Uri?>(null) }
