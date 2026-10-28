@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.View
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -119,6 +120,9 @@ import com.lapcevichme.ambientlight.app.ui.theme.AmbientLightTheme
 import com.lapcevichme.ambientlight.compose.rememberAmbientLightState
 import com.lapcevichme.ambientlight.compose.rememberAmbientVideoConnector
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.net.toUri
@@ -223,10 +227,14 @@ fun AmbientSandboxScreen() {
         initialFlickerReduction = 50
     )
 
-    var customVideoUri by remember { mutableStateOf<Uri?>(null) }
-    var customVideoName by remember { mutableStateOf<String?>(null) }
+    var customVideoUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var customVideoName by rememberSaveable { mutableStateOf<String?>(null) }
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
+    // Hoisted here: PortraitSandboxView leaves composition in fullscreen, which drops its saveable state
+    var isCardMode by rememberSaveable { mutableStateOf(false) }
+    // Playback position survives activity recreation (theme/locale/multi-window changes, process death)
+    var savedPositionMs by rememberSaveable { mutableLongStateOf(0L) }
 
     // Playback state
     var playbackStatusRes by remember { mutableIntStateOf(R.string.demo_status_loading) }
@@ -260,6 +268,7 @@ fun AmbientSandboxScreen() {
                 exoPlayer.seekTo(0)
                 exoPlayer.play()
             } else {
+                savedPositionMs = 0L
                 customVideoUri = uri
             }
         }
@@ -318,7 +327,7 @@ fun AmbientSandboxScreen() {
         playbackErrorCode = null
         backdropView.reset()
         val mediaUri = customVideoUri ?: getOfflineDemoUri(context.packageName)
-        exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri))
+        exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri), savedPositionMs)
         exoPlayer.prepare()
         exoPlayer.play()
     }
@@ -327,14 +336,41 @@ fun AmbientSandboxScreen() {
 
     DisposableEffect(Unit) {
         exoPlayer.setVideoTextureView(textureView)
-
-        backdropView.onDominantColorListener = { _ ->
-            framesCount = backdropView.framesProcessed
-        }
-
         onDispose {
             exoPlayer.release()
         }
+    }
+
+    // Pause in background (no audio behind other apps) and remember the position for recreation
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        var resumeOnStart = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> if (resumeOnStart) exoPlayer.play()
+                Lifecycle.Event.ON_STOP -> {
+                    resumeOnStart = exoPlayer.playWhenReady
+                    savedPositionMs = exoPlayer.currentPosition
+                    exoPlayer.pause()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Frame counter is polled: the dominant color callback only fires when the color changes
+    LaunchedEffect(backdropView) {
+        while (true) {
+            framesCount = backdropView.framesProcessed
+            delay(500)
+        }
+    }
+
+    // Layout listeners from the connector cover size changes; also resync on mode switches
+    LaunchedEffect(isFullscreen, isCardMode, videoAspect) {
+        textureView.post { updateVideoCoordinates(textureView, backdropView) }
     }
 
     // Sync ambient backdrop parameters
@@ -360,6 +396,8 @@ fun AmbientSandboxScreen() {
             videoAspect = videoAspect,
             activeVideoTitle = activeVideoTitle,
             onEnterFullscreen = { isFullscreen = true },
+            isCardMode = isCardMode,
+            onCardModeChange = { isCardMode = it },
             onOpenSettings = { showSettingsSheet = true },
             playbackStatus = playbackStatus,
             playbackError = playbackError,
@@ -371,6 +409,7 @@ fun AmbientSandboxScreen() {
                 )
             },
             onResetToSample = {
+                savedPositionMs = 0L
                 customVideoUri = null
                 customVideoName = null
             },
@@ -598,11 +637,7 @@ fun FullscreenLandscapePlayer(
         // LAYER 0: Ambient Backdrop fills the full landscape display (including letterbox/pillarbox bars)
         AndroidView(
             factory = {
-                backdropView.apply {
-                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                        view.post { updateVideoCoordinates(textureView, backdropView) }
-                    }
-                }
+                backdropView.detachFromParent()
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -617,11 +652,7 @@ fun FullscreenLandscapePlayer(
         ) {
             AndroidView(
                 factory = {
-                    textureView.apply {
-                        addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                            view.post { updateVideoCoordinates(view, backdropView) }
-                        }
-                    }
+                    textureView.detachFromParent()
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -724,17 +755,14 @@ fun PortraitSandboxView(
     playbackStatus: String,
     playbackError: String?,
     framesCount: Long,
+    isCardMode: Boolean,
+    onCardModeChange: (Boolean) -> Unit,
     isCustomVideo: Boolean,
     onPickGalleryVideo: () -> Unit,
     onResetToSample: () -> Unit,
     onUpdateVideoTitle: (String) -> Unit
 ) {
-    var isCardMode by rememberSaveable { mutableStateOf(false) }
     var showEditTitleDialog by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(isCardMode) {
-        textureView.post { updateVideoCoordinates(textureView, backdropView) }
-    }
 
     if (showEditTitleDialog) {
         val defaultSampleTitle = stringResource(R.string.demo_default_video_title)
@@ -772,11 +800,7 @@ fun PortraitSandboxView(
                 // LAYER 0: Ambient Backdrop View matching the video + metadata stage
                 AndroidView(
                     factory = {
-                        backdropView.apply {
-                            addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                                view.post { updateVideoCoordinates(textureView, backdropView) }
-                            }
-                        }
+                        backdropView.detachFromParent()
                     },
                     modifier = Modifier.matchParentSize()
                 )
@@ -824,11 +848,7 @@ fun PortraitSandboxView(
                         ) {
                             AndroidView(
                                 factory = {
-                                    textureView.apply {
-                                        addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                                            view.post { updateVideoCoordinates(view, backdropView) }
-                                        }
-                                    }
+                                    textureView.detachFromParent()
                                 },
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -963,7 +983,7 @@ fun PortraitSandboxView(
                         }
                         Switch(
                             checked = isCardMode,
-                            onCheckedChange = { isCardMode = it },
+                            onCheckedChange = onCardModeChange,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFF1E1E1E),
                                 checkedTrackColor = Color.White,
@@ -1032,6 +1052,14 @@ fun PortraitSandboxView(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
+
+/**
+ * The backdrop and texture views are shared between the portrait and fullscreen layouts, so a factory
+ * may receive a view whose previous AndroidView host has not released it yet.
+ */
+private fun <T : View> T.detachFromParent(): T = apply {
+    (parent as? ViewGroup)?.removeView(this)
 }
 
 private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdropView) {
