@@ -63,7 +63,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.github.lapcevichme"
                 artifactId = "android-ambient-light"
-                version = "1.0.1"
+                version = "1.0.2"
             }
         }
     }

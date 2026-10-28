@@ -11,7 +11,7 @@
     <string name="ambient_brightness">Яркость</string>
     <string name="ambient_vibrance">Насыщенность (Vibrance)</string>
     <string name="ambient_spread_limit">Длина лучей (Spread Limit)</string>
-    <string name="ambient_edge_size">Ширина забора с кромки</string>
+    <string name="ambient_edge_size">Глубина выборки от края</string>
     <string name="ambient_flicker_reduction">Сглаживание мерцания (Flicker)</string>
 
     <!-- Advanced Settings Section -->

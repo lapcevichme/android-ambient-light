@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.View
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,6 +36,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,6 +52,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Share
@@ -93,6 +97,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -109,6 +114,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
 import com.lapcevichme.ambientlight.ambient.AmbientSettingsBottomSheet
@@ -116,6 +122,9 @@ import com.lapcevichme.ambientlight.app.ui.theme.AmbientLightTheme
 import com.lapcevichme.ambientlight.compose.rememberAmbientLightState
 import com.lapcevichme.ambientlight.compose.rememberAmbientVideoConnector
 import com.lapcevichme.ambientlight.player.InterceptingTextureView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.net.toUri
@@ -217,18 +226,24 @@ fun AmbientSandboxScreen() {
     // Ambient settings state
     val ambientState = rememberAmbientLightState(
         initialSpreadLimit = 0.55f,
-        initialFlickerReduction = 50
+        initialFlickerReduction = 10
     )
 
-    var customVideoUri by remember { mutableStateOf<Uri?>(null) }
-    var customVideoName by remember { mutableStateOf<String?>(null) }
+    var customVideoUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var customVideoName by rememberSaveable { mutableStateOf<String?>(null) }
     var isFullscreen by rememberSaveable { mutableStateOf(false) }
     var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
+    // Hoisted here: PortraitSandboxView leaves composition in fullscreen, which drops its saveable state
+    var isCardMode by rememberSaveable { mutableStateOf(false) }
+    // Playback position survives activity recreation (theme/locale/multi-window changes, process death)
+    var savedPositionMs by rememberSaveable { mutableLongStateOf(0L) }
 
     // Playback state
     var playbackStatusRes by remember { mutableIntStateOf(R.string.demo_status_loading) }
     var playbackErrorCode by remember { mutableStateOf<String?>(null) }
     var framesCount by remember { mutableLongStateOf(0L) }
+    // Real display aspect ratio of the current video (ExoPlayer stretches frames to fill a bare TextureView)
+    var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
 
     // ExoPlayer lifecycle management
     val exoPlayer = remember {
@@ -240,7 +255,8 @@ fun AmbientSandboxScreen() {
 
     val defaultDemoTitle = stringResource(R.string.demo_sample_offline)
     val defaultGalleryName = stringResource(R.string.gallery_video_default_name)
-    val activeVideoTitle = customVideoName ?: defaultDemoTitle
+    // Fallback titles are resolved on every composition so they follow locale changes
+    val activeVideoTitle = customVideoName ?: if (customVideoUri != null) defaultGalleryName else defaultDemoTitle
     val playbackStatus = stringResource(playbackStatusRes)
     val playbackError = playbackErrorCode?.let { stringResource(R.string.demo_playback_error, it) }
 
@@ -248,13 +264,13 @@ fun AmbientSandboxScreen() {
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val name = queryDisplayName(context, uri) ?: defaultGalleryName
-            customVideoName = name
+            customVideoName = queryDisplayName(context, uri)
             if (customVideoUri == uri) {
                 playbackErrorCode = null
                 exoPlayer.seekTo(0)
                 exoPlayer.play()
             } else {
+                savedPositionMs = 0L
                 customVideoUri = uri
             }
         }
@@ -296,6 +312,12 @@ fun AmbientSandboxScreen() {
             override fun onPlayerError(error: PlaybackException) {
                 playbackErrorCode = error.errorCodeName
             }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    videoAspect = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+                }
+            }
         }
         exoPlayer.addListener(listener)
         onDispose {
@@ -307,7 +329,7 @@ fun AmbientSandboxScreen() {
         playbackErrorCode = null
         backdropView.reset()
         val mediaUri = customVideoUri ?: getOfflineDemoUri(context.packageName)
-        exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri))
+        exoPlayer.setMediaItem(MediaItem.fromUri(mediaUri), savedPositionMs)
         exoPlayer.prepare()
         exoPlayer.play()
     }
@@ -316,14 +338,41 @@ fun AmbientSandboxScreen() {
 
     DisposableEffect(Unit) {
         exoPlayer.setVideoTextureView(textureView)
-
-        backdropView.onDominantColorListener = { _ ->
-            framesCount = backdropView.framesProcessed
-        }
-
         onDispose {
             exoPlayer.release()
         }
+    }
+
+    // Pause in background (no audio behind other apps) and remember the position for recreation
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        var resumeOnStart = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> if (resumeOnStart) exoPlayer.play()
+                Lifecycle.Event.ON_STOP -> {
+                    resumeOnStart = exoPlayer.playWhenReady
+                    savedPositionMs = exoPlayer.currentPosition
+                    exoPlayer.pause()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Frame counter is polled: the dominant color callback only fires when the color changes
+    LaunchedEffect(backdropView) {
+        while (true) {
+            framesCount = backdropView.framesProcessed
+            delay(500)
+        }
+    }
+
+    // Layout listeners from the connector cover size changes; also resync on mode switches
+    LaunchedEffect(isFullscreen, isCardMode, videoAspect) {
+        textureView.post { updateVideoCoordinates(textureView, backdropView) }
     }
 
     // Sync ambient backdrop parameters
@@ -334,6 +383,7 @@ fun AmbientSandboxScreen() {
             backdropView = backdropView,
             textureView = textureView,
             exoPlayer = exoPlayer,
+            videoAspect = videoAspect,
             videoTitle = activeVideoTitle,
             isEnabled = ambientState.isEnabled,
             onToggleEnabled = { ambientState.isEnabled = it },
@@ -345,8 +395,11 @@ fun AmbientSandboxScreen() {
             backdropView = backdropView,
             textureView = textureView,
             exoPlayer = exoPlayer,
+            videoAspect = videoAspect,
             activeVideoTitle = activeVideoTitle,
             onEnterFullscreen = { isFullscreen = true },
+            isCardMode = isCardMode,
+            onCardModeChange = { isCardMode = it },
             onOpenSettings = { showSettingsSheet = true },
             playbackStatus = playbackStatus,
             playbackError = playbackError,
@@ -358,6 +411,7 @@ fun AmbientSandboxScreen() {
                 )
             },
             onResetToSample = {
+                savedPositionMs = 0L
                 customVideoUri = null
                 customVideoName = null
             },
@@ -480,11 +534,12 @@ fun VideoPlayerControls(
                         }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (isPlaying) "⏸" else "▶",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
+                        // Vector icons: the ⏸/▶ emoji render as colored emoji glyphs on many devices
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
@@ -563,6 +618,7 @@ fun FullscreenLandscapePlayer(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
     exoPlayer: ExoPlayer,
+    videoAspect: Float,
     videoTitle: String,
     isEnabled: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
@@ -584,30 +640,22 @@ fun FullscreenLandscapePlayer(
         // LAYER 0: Ambient Backdrop fills the full landscape display (including letterbox/pillarbox bars)
         AndroidView(
             factory = {
-                backdropView.apply {
-                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                        view.post { updateVideoCoordinates(textureView, backdropView) }
-                    }
-                }
+                backdropView.detachFromParent()
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // LAYER 1: Centered 16:9 Video (sitting seamlessly flush on the ambient backdrop)
+        // LAYER 1: Centered video at its real aspect ratio (sitting seamlessly flush on the ambient backdrop)
         Box(
             modifier = Modifier
-                .aspectRatio(16f / 9f)
+                .aspectRatio(videoAspect)
                 .align(Alignment.Center)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black)
         ) {
             AndroidView(
                 factory = {
-                    textureView.apply {
-                        addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                            view.post { updateVideoCoordinates(view, backdropView) }
-                        }
-                    }
+                    textureView.detachFromParent()
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -703,23 +751,21 @@ fun PortraitSandboxView(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
     exoPlayer: ExoPlayer,
+    videoAspect: Float,
     activeVideoTitle: String,
     onEnterFullscreen: () -> Unit,
     onOpenSettings: () -> Unit,
     playbackStatus: String,
     playbackError: String?,
     framesCount: Long,
+    isCardMode: Boolean,
+    onCardModeChange: (Boolean) -> Unit,
     isCustomVideo: Boolean,
     onPickGalleryVideo: () -> Unit,
     onResetToSample: () -> Unit,
     onUpdateVideoTitle: (String) -> Unit
 ) {
-    var isCardMode by rememberSaveable { mutableStateOf(false) }
     var showEditTitleDialog by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(isCardMode) {
-        textureView.post { updateVideoCoordinates(textureView, backdropView) }
-    }
 
     if (showEditTitleDialog) {
         val defaultSampleTitle = stringResource(R.string.demo_default_video_title)
@@ -757,11 +803,7 @@ fun PortraitSandboxView(
                 // LAYER 0: Ambient Backdrop View matching the video + metadata stage
                 AndroidView(
                     factory = {
-                        backdropView.apply {
-                            addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                                view.post { updateVideoCoordinates(textureView, backdropView) }
-                            }
-                        }
+                        backdropView.detachFromParent()
                     },
                     modifier = Modifier.matchParentSize()
                 )
@@ -776,41 +818,51 @@ fun PortraitSandboxView(
                         Spacer(modifier = Modifier.height(6.dp))
                     }
 
-                    // Video Player (edge-to-edge full width or card mode with rounded corners)
-                    val playerModifier = if (isCardMode) {
+                    // Video Player (edge-to-edge full width or card mode with rounded corners).
+                    // Sized to the real video aspect ratio; tall videos are height-capped and centered.
+                    val maxPlayerHeight = LocalConfiguration.current.screenHeightDp.dp * 0.6f
+                    val playerSlotModifier = if (isCardMode) {
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 6.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black)
-                            .aspectRatio(16f / 9f)
+                            .heightIn(max = maxPlayerHeight)
                     } else {
                         Modifier
                             .fillMaxWidth()
+                            .heightIn(max = maxPlayerHeight)
+                    }
+                    val playerModifier = if (isCardMode) {
+                        Modifier
+                            .aspectRatio(videoAspect)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.Black)
-                            .aspectRatio(16f / 9f)
+                    } else {
+                        Modifier
+                            .aspectRatio(videoAspect)
+                            .background(Color.Black)
                     }
 
                     Box(
-                        modifier = playerModifier
+                        modifier = playerSlotModifier,
+                        contentAlignment = Alignment.Center
                     ) {
-                        AndroidView(
-                            factory = {
-                                textureView.apply {
-                                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                                        view.post { updateVideoCoordinates(view, backdropView) }
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Box(
+                            modifier = playerModifier
+                        ) {
+                            AndroidView(
+                                factory = {
+                                    textureView.detachFromParent()
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
 
-                        // Overlaid controls with Scrubber, Play/Pause, Fullscreen toggle, and Settings gear
-                        VideoPlayerControls(
-                            exoPlayer = exoPlayer,
-                            onEnterFullscreen = onEnterFullscreen,
-                            onOpenSettings = onOpenSettings
-                        )
+                            // Overlaid controls with Scrubber, Play/Pause, Fullscreen toggle, and Settings gear
+                            VideoPlayerControls(
+                                exoPlayer = exoPlayer,
+                                onEnterFullscreen = onEnterFullscreen,
+                                onOpenSettings = onOpenSettings
+                            )
+                        }
                     }
 
                     // Playback status or error indicator
@@ -934,7 +986,7 @@ fun PortraitSandboxView(
                         }
                         Switch(
                             checked = isCardMode,
-                            onCheckedChange = { isCardMode = it },
+                            onCheckedChange = onCardModeChange,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFF1E1E1E),
                                 checkedTrackColor = Color.White,
@@ -1003,6 +1055,14 @@ fun PortraitSandboxView(
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
+}
+
+/**
+ * The backdrop and texture views are shared between the portrait and fullscreen layouts, so a factory
+ * may receive a view whose previous AndroidView host has not released it yet.
+ */
+private fun <T : View> T.detachFromParent(): T = apply {
+    (parent as? ViewGroup)?.removeView(this)
 }
 
 private fun updateVideoCoordinates(videoView: View, backdropView: AmbientBackdropView) {

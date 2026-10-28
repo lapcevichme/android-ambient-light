@@ -36,20 +36,14 @@ class AmbientBackdropView @JvmOverloads constructor(
     private val shaderPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     // Fallback drawing structures for legacy Android (API 24-32)
-    private val fallbackBufferWidth = 24
-    private val fallbackBufferHeight = 14
-    private val fallbackMargin = 2
+    private val fallbackBufferWidth = 32
+    private val fallbackBufferHeight = 32
     private val fallbackBuffer = Bitmap.createBitmap(fallbackBufferWidth, fallbackBufferHeight, Bitmap.Config.ARGB_8888)
-    private val fallbackCanvas = Canvas(fallbackBuffer)
-    private val fallbackInnerDst = Rect(
-        fallbackMargin,
-        fallbackMargin,
-        fallbackBufferWidth - fallbackMargin,
-        fallbackBufferHeight - fallbackMargin
-    )
-    private val fallbackScalePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val fallbackPixels = IntArray(fallbackBufferWidth * fallbackBufferHeight)
     private val fallbackBlurTemp = IntArray(fallbackBufferWidth * fallbackBufferHeight)
+    private var fallbackFramePixels = IntArray(0)
+    private var fallbackLastFrame: Bitmap? = null
+    private var fallbackLastCrop = CropBounds()
 
     private val fallbackSrcRect = Rect()
     private val fallbackDstRect = RectF()
@@ -85,6 +79,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateEdgeSize(value)
+            refreshFallbackBuffer()
             postInvalidateOnAnimation()
         }
 
@@ -146,6 +141,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateFadeParams(fadeStart, fadeCurve)
+            refreshFallbackBuffer()
             postInvalidateOnAnimation()
         }
 
@@ -153,6 +149,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         set(value) {
             field = value
             ambientShader?.updateFadeParams(fadeStart, fadeCurve)
+            refreshFallbackBuffer()
             postInvalidateOnAnimation()
         }
 
@@ -187,10 +184,11 @@ class AmbientBackdropView @JvmOverloads constructor(
     private var videoNormRight = 1f
     private var videoNormBottom = 0.35f
 
-    private var lastPixelLeft = -1f
-    private var lastPixelTop = -1f
-    private var lastPixelRight = -1f
-    private var lastPixelBottom = -1f
+    private var hasVideoPosition = false
+    private var lastPixelLeft = 0f
+    private var lastPixelTop = 0f
+    private var lastPixelRight = 0f
+    private var lastPixelBottom = 0f
 
     init {
         setWillNotDraw(false)
@@ -237,6 +235,7 @@ class AmbientBackdropView @JvmOverloads constructor(
      * Updates the video's layout position on screen to align spatial light projection.
      */
     fun updateVideoPosition(pixelLeft: Float, pixelTop: Float, pixelRight: Float, pixelBottom: Float) {
+        hasVideoPosition = true
         lastPixelLeft = pixelLeft
         lastPixelTop = pixelTop
         lastPixelRight = pixelRight
@@ -337,7 +336,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         if (w > 0 && h > 0) {
             ambientShader?.updateResolution(w.toFloat(), h.toFloat())
             updateBlurEffect()
-            if (lastPixelLeft >= 0f) {
+            if (hasVideoPosition) {
                 updateVideoPosition(lastPixelLeft, lastPixelTop, lastPixelRight, lastPixelBottom)
             } else {
                 updateFallbackGeometry()
@@ -346,23 +345,30 @@ class AmbientBackdropView @JvmOverloads constructor(
     }
 
     private fun updateFallbackGeometry() {
-        if (lastPixelLeft < 0f || width <= 0 || height <= 0) {
+        if (!hasVideoPosition || width <= 0 || height <= 0) {
             fallbackDstRect.set(0f, 0f, width.toFloat(), height.toFloat())
+            refreshFallbackBuffer()
             return
         }
 
+        // Same physical reach on every side as the AGSL falloff (spreadLimit * 2.2 * half video width)
         val vWidth = (lastPixelRight - lastPixelLeft).coerceAtLeast(1f)
-        val vHeight = (lastPixelBottom - lastPixelTop).coerceAtLeast(1f)
+        val reach = vWidth * 1.1f * spreadLimit.coerceAtLeast(0.01f)
 
-        val spreadX = vWidth * spreadLimit
-        val spreadY = vHeight * spreadLimit
-
-        val left = if (directionLeft) lastPixelLeft - spreadX else lastPixelLeft
-        val top = if (directionTop) lastPixelTop - spreadY else lastPixelTop
-        val right = if (directionRight) lastPixelRight + spreadX else lastPixelRight
-        val bottom = if (directionBottom) lastPixelBottom + spreadY else lastPixelBottom
+        val left = if (directionLeft) lastPixelLeft - reach else lastPixelLeft
+        val top = if (directionTop) lastPixelTop - reach else lastPixelTop
+        val right = if (directionRight) lastPixelRight + reach else lastPixelRight
+        val bottom = if (directionBottom) lastPixelBottom + reach else lastPixelBottom
 
         fallbackDstRect.set(left, top, right, bottom)
+        refreshFallbackBuffer()
+    }
+
+    /** Re-projects the last frame after geometry/parameter changes (e.g. while paused). */
+    private fun refreshFallbackBuffer() {
+        if (ambientShader == null && hasValidFrame) {
+            renderFallbackBuffer()
+        }
     }
 
     private fun updateFallbackColorMatrix() {
@@ -413,23 +419,99 @@ class AmbientBackdropView @JvmOverloads constructor(
     }
 
     private fun processFallbackFrame(smoothed: Bitmap, crop: CropBounds) {
-        val srcL = (crop.left * smoothed.width).toInt().coerceIn(0, smoothed.width - 1)
-        val srcT = (crop.top * smoothed.height).toInt().coerceIn(0, smoothed.height - 1)
-        val srcR = ((1f - crop.right) * smoothed.width).toInt().coerceIn(srcL + 1, smoothed.width)
-        val srcB = ((1f - crop.bottom) * smoothed.height).toInt().coerceIn(srcT + 1, smoothed.height)
+        fallbackLastFrame = smoothed
+        fallbackLastCrop = crop
+        renderFallbackBuffer()
+    }
+
+    /**
+     * CPU port of the AGSL projection: every buffer cell covering [fallbackDstRect] samples the same
+     * Kroos-style projector copy (grown in [edgeSize] steps) and uses the same distance falloff.
+     */
+    private fun renderFallbackBuffer() {
+        val frame = fallbackLastFrame ?: return
+        val crop = fallbackLastCrop
+        val fw = frame.width
+        val fh = frame.height
+        if (fallbackFramePixels.size != fw * fh) fallbackFramePixels = IntArray(fw * fh)
+        frame.getPixels(fallbackFramePixels, 0, fw, 0, 0, fw, fh)
+
+        val srcL = (crop.left * fw).toInt().coerceIn(0, fw - 1)
+        val srcT = (crop.top * fh).toInt().coerceIn(0, fh - 1)
+        val srcR = ((1f - crop.right) * fw).toInt().coerceIn(srcL + 1, fw)
+        val srcB = ((1f - crop.bottom) * fh).toInt().coerceIn(srcT + 1, fh)
         fallbackSrcRect.set(srcL, srcT, srcR, srcB)
 
-        // Clear buffer with transparent background
-        fallbackBuffer.eraseColor(Color.TRANSPARENT)
+        val dst = fallbackDstRect
+        if (dst.width() <= 0f || dst.height() <= 0f) return
+        val vL: Float
+        val vT: Float
+        val vR: Float
+        val vB: Float
+        if (hasVideoPosition) {
+            vL = lastPixelLeft; vT = lastPixelTop; vR = lastPixelRight; vB = lastPixelBottom
+        } else {
+            vL = dst.left; vT = dst.top; vR = dst.right; vB = dst.bottom
+        }
+        val halfW = ((vR - vL) * 0.5f).coerceAtLeast(1f)
+        val halfH = ((vB - vT) * 0.5f).coerceAtLeast(1f)
+        val cx = (vL + vR) * 0.5f
+        val cy = (vT + vB) * 0.5f
+        val maxDistPx = (spreadLimit.coerceAtLeast(0.01f) * 2.2f * halfW).coerceAtLeast(1f)
+        val easing = 16f / (fadeCurve.coerceAtLeast(1f) * 0.64f)
+        val stepPx = (edgeSize * maxOf(halfW, halfH)).coerceAtLeast(1f)
 
-        // Scale downsampled cropped video frame into inner rectangle (leaving 2px transparent border)
-        fallbackCanvas.drawBitmap(smoothed, fallbackSrcRect, fallbackInnerDst, fallbackScalePaint)
+        val bw = fallbackBufferWidth
+        val bh = fallbackBufferHeight
+        for (by in 0 until bh) {
+            val py = (dst.top + (by + 0.5f) / bh * dst.height() - cy) / halfH
+            for (bx in 0 until bw) {
+                val px = (dst.left + (bx + 0.5f) / bw * dst.width() - cx) / halfW
+                val idx = by * bw + bx
 
-        // Perform fast 2-pass box blur to softly blend pixel blocks and feather outer alpha
-        fallbackBuffer.getPixels(fallbackPixels, 0, fallbackBufferWidth, 0, 0, fallbackBufferWidth, fallbackBufferHeight)
-        fastBoxBlur(fallbackPixels, fallbackBlurTemp, fallbackBufferWidth, fallbackBufferHeight)
-        fastBoxBlur(fallbackPixels, fallbackBlurTemp, fallbackBufferWidth, fallbackBufferHeight)
-        fallbackBuffer.setPixels(fallbackPixels, 0, fallbackBufferWidth, 0, 0, fallbackBufferWidth, fallbackBufferHeight)
+                val outsideX = kotlin.math.abs(px) > 1f
+                val outsideY = kotlin.math.abs(py) > 1f
+                if (!outsideX && !outsideY) {
+                    fallbackPixels[idx] = sampleFallbackFrame(px, py)
+                    continue
+                }
+                val masked = (py < -1f && !directionTop) || (px > 1f && !directionRight) ||
+                    (py > 1f && !directionBottom) || (px < -1f && !directionLeft)
+                val dx = (kotlin.math.abs(px) - 1f).coerceAtLeast(0f) * halfW
+                val dy = (kotlin.math.abs(py) - 1f).coerceAtLeast(0f) * halfH
+                val dist = kotlin.math.sqrt(dx * dx + dy * dy) / maxDistPx
+                if (masked || dist >= 1f) {
+                    fallbackPixels[idx] = 0
+                    continue
+                }
+                val fadeProgress = ((dist - fadeStart) / (1f - fadeStart).coerceAtLeast(0.001f)).coerceIn(0f, 1f)
+                val alpha = 1f - Math.pow(fadeProgress.toDouble(), easing.toDouble()).toFloat()
+
+                // Kroos projector: sample the smallest copy (grown by equal pixel steps) containing the cell
+                val offX = px * halfW
+                val offY = py * halfH
+                val growPx = maxOf(kotlin.math.abs(offX) - halfW, kotlin.math.abs(offY) - halfH)
+                val level = growPx / stepPx + 0.5f
+                val c = sampleFallbackFrame(offX / (halfW + level * stepPx), offY / (halfH + level * stepPx))
+                fallbackPixels[idx] = (c and 0x00FFFFFF) or ((alpha * 255f).toInt() shl 24)
+            }
+        }
+
+        // Fast 2-pass box blur to softly blend the coarse cells
+        fastBoxBlur(fallbackPixels, fallbackBlurTemp, bw, bh)
+        fastBoxBlur(fallbackPixels, fallbackBlurTemp, bw, bh)
+        fallbackBuffer.setPixels(fallbackPixels, 0, bw, 0, 0, bw, bh)
+    }
+
+    /** Nearest-neighbour read of the cropped frame at video-normalized coordinates in [-1, 1]. */
+    private fun sampleFallbackFrame(px: Float, py: Float): Int {
+        val fw = fallbackLastFrame?.width ?: return 0
+        val src = fallbackSrcRect
+        val u = (px.coerceIn(-1f, 1f) * 0.5f + 0.5f)
+        val v = (py.coerceIn(-1f, 1f) * 0.5f + 0.5f)
+        val x = (src.left + u * src.width()).toInt().coerceIn(src.left, src.right - 1)
+        val y = (src.top + v * src.height()).toInt().coerceIn(src.top, src.bottom - 1)
+        return fallbackFramePixels[y * fw + x]
     }
 
     private fun fastBoxBlur(pixels: IntArray, temp: IntArray, w: Int, h: Int) {
@@ -456,29 +538,6 @@ class AmbientBackdropView @JvmOverloads constructor(
         for (y in 0 until h) {
             val rowOffset = y * w
             for (x in 0 until w) {
-                // Ensure outermost 1px perimeter stays 0 alpha (feathering to transparent)
-                if (x == 0 || x == w - 1 || y == 0 || y == h - 1) {
-                    pixels[rowOffset + x] = 0
-                    continue
-                }
-                // Directional suppression
-                if (!directionTop && y < fallbackMargin + 2) {
-                    pixels[rowOffset + x] = 0
-                    continue
-                }
-                if (!directionBottom && y >= h - fallbackMargin - 2) {
-                    pixels[rowOffset + x] = 0
-                    continue
-                }
-                if (!directionLeft && x < fallbackMargin + 2) {
-                    pixels[rowOffset + x] = 0
-                    continue
-                }
-                if (!directionRight && x >= w - fallbackMargin - 2) {
-                    pixels[rowOffset + x] = 0
-                    continue
-                }
-
                 var r = 0; var g = 0; var b = 0; var a = 0; var count = 0
                 for (dy in -1..1) {
                     val ny = y + dy

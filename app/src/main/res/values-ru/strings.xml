@@ -37,15 +37,15 @@
     <string name="ambient_reset_defaults">Сбросить все параметры по умолчанию</string>
 
     <!-- Demo Player Sandbox Strings -->
-    <string name="demo_quick_settings">Параметры подсветки (Ambient Mode)</string>
+    <string name="demo_quick_settings">Параметры подсветки</string>
     <string name="demo_quick_settings_action">Настроить →</string>
     <string name="demo_video_source_title">ИСТОЧНИК ВИДЕО (ДЕМО-ПЛЕЕР)</string>
     <string name="demo_player_mode_title">Круговое 360° свечение</string>
     <string name="demo_player_mode_card_desc">Карточка с отступами и скруглениями</string>
     <string name="demo_player_mode_edge_desc">Как в YouTube (на всю ширину экрана)</string>
-    <string name="demo_pick_gallery">📁 Выбрать видео из галереи</string>
-    <string name="demo_pick_gallery_another">📁 Выбрать другое видео из галереи</string>
-    <string name="demo_return_sample">🔄 Вернуться к тестовому видео</string>
+    <string name="demo_pick_gallery">Выбрать видео из галереи</string>
+    <string name="demo_pick_gallery_another">Выбрать другое видео из галереи</string>
+    <string name="demo_return_sample">Вернуться к тестовому видео</string>
     <string name="demo_exit_fullscreen">← Выход из полноэкранного</string>
     <string name="demo_fullscreen_badge">%1$s • Полноэкранный режим с подсветкой</string>
     <string name="demo_ambient_label">Подсветка:</string>
@@ -79,7 +79,7 @@
     <string name="mock_more_options">Ещё</string>
     <string name="mock_comments_title">Комментарии</string>
     <string name="mock_comments_count">5 тыс.</string>
-    <string name="mock_comment_text">Scroll to bottom to select your video</string>
+    <string name="mock_comment_text">Пролистайте вниз, чтобы выбрать своё видео</string>
 
     <!-- Demo Status and Playback Messages -->
     <string name="demo_frames_processed">%1$s • Обработано кадров: %2$d</string>

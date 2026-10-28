@@ -51,7 +51,7 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```
 dependencies {
-    implementation("com.github.lapcevichme:android-ambient-light:1.0.1")
+    implementation("com.github.lapcevichme:android-ambient-light:1.0.2")
 }
 ```
 
@@ -166,12 +166,12 @@ fun CustomAmbientControls(state: AmbientLightState) {
 | Property | Type | Default | Description | 
 | ----- | ----- | ----- | ----- | 
 | `state.isEnabled` | `Boolean` | `true` | Master toggle to enable or disable ambient lighting | 
-| `state.brightness` | `Float` | `1.0f` | Light brightness multiplier (`0.5f` .. `2.5f`) | 
-| `state.blurRadius` | `Float` | `50f` | Hardware blur radius (`10f` .. `100f`) | 
+| `state.brightness` | `Float` | `1.0f` | Light brightness multiplier (`0.0f` .. `2.0f`) | 
+| `state.blurRadius` | `Float` | `50f` | Hardware blur radius in px (`0f` .. `120f`) | 
 | `state.vibrance` | `Float` | `0.0f` | HSV saturation boost curve (`0.0f` .. `1.0f`) | 
-| `state.contrast` | `Float` | `1.0f` | Ray contrast factor (`0.5f` .. `2.0f`) | 
-| `state.spreadLimit` | `Float` | `0.40f` | Ray reach and distance falloff from video edges (`0.1f` .. `0.8f`) | 
-| `state.edgeSize` | `Float` | `0.12f` | Border sample depth for ray-casting (`0.05f` .. `0.25f`) | 
+| `state.contrast` | `Float` | `1.0f` | Ray contrast factor (`0.5f` .. `1.5f`) | 
+| `state.spreadLimit` | `Float` | `0.40f` | Ray reach from video edges, relative to video width (`0.0f` .. `2.5f`) | 
+| `state.edgeSize` | `Float` | `0.12f` | How deep inside the frame border colors are sampled; Kroos' edge size (`0.0f` .. `0.5f`) | 
 | `state.flickerReduction` | `Int` | `10` | Temporal smoothing percentage (`0` .. `100`) | 
 | `state.isOledMode` | `Boolean` | `false` | Deep black cutoff to eliminate weak glow on OLED panels | 
 | `state.detectLetterbox` | `Boolean` | `true` | Real-time automatic black bar detection (21:9, 4:3) | 

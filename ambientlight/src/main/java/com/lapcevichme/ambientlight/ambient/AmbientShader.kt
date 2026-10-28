@@ -35,7 +35,7 @@ internal interface AmbientShaderDelegate {
  * Manages the AGSL runtime shader for localized ambient light radiating from behind the player.
  *
  * Implements:
- * 1. Perimeter sampling: rays and glow emanate from the actual video borders outward.
+ * 1. Perimeter sampling: Kroos-style stacked projector copies grown by equal pixel steps (edge size).
  * 2. Letterbox/pillarbox crop compensation.
  * 3. Vibrance boosting in HSV color space.
  * 4. Center attenuation: dims pixels directly underneath the player so no sharp duplicate video is rendered.
@@ -92,33 +92,34 @@ internal class AmbientShader : AmbientShaderDelegate {
             return (v >= 0.0) ? y : (1.0 - y);
         }
 
+        // Samples the video frame at normalized video UV with letterbox crop compensation
+        half4 sampleVideo(float2 normVideoUV) {
+            float2 croppedUV = clamp(uCropOffset + (normVideoUV * uCropScale), float2(0.0), float2(1.0));
+            return videoTexture.eval(croppedUV * uTextureResolution);
+        }
+
         half4 main(float2 fragCoord) {
             float2 uv = fragCoord / uResolution;
 
             // Video center and half-size in backdrop coordinates [0, 1]
             float2 videoCenter = (uVideoRect.xy + uVideoRect.zw) * 0.5;
             float2 videoHalfSize = max((uVideoRect.zw - uVideoRect.xy) * 0.5, float2(0.001));
+            float2 videoHalfSizePx = videoHalfSize * uResolution;
 
             // Fragment vector from video center normalized by video half-size
             // At video perimeter, max(abs(p.x), abs(p.y)) == 1.0
             float2 p = (uv - videoCenter) / videoHalfSize;
             float s = max(abs(p.x), abs(p.y));
 
-            // Uniform isotropic projection: scale vertical ratio by video aspect ratio (e.g. 16/9)
-            // so physical ray length is uniform across all directions
-            float aspect = videoHalfSize.x / videoHalfSize.y;
-            float2 ratio = float2(1.0, aspect);
-
             // Maximum expansion scale
             float spread = max(uSpreadLimit, 0.01);
 
-            // Sample coordinates and falloff:
-            float2 normVideoUV;
+            half4 color;
             float falloff = 0.0;
 
             if (s <= 1.0) {
                 // Inside video bounds: solid full brightness so blur does not create dark dips near borders
-                normVideoUV = p * 0.5 + 0.5;
+                color = sampleVideo(p * 0.5 + 0.5);
                 falloff = 1.0;
             } else {
                 // Directional masking (Wessel Kroos directions filter):
@@ -128,31 +129,33 @@ internal class AmbientShader : AmbientShaderDelegate {
                 if (p.y > 1.0 && uDirections.z < 0.5) dirMask = 0.0;  // Bottom disabled
                 if (p.x < -1.0 && uDirections.w < 0.5) dirMask = 0.0; // Left disabled
 
-                if (dirMask > 0.0) {
-                    // Outside video bounds: pure continuous radial projection from video center
-                    normVideoUV = (p / s) * 0.5 + 0.5;
+                // Wessel Kroos' projector (projector-webgl.js multiTexture): stacked copies of the frame,
+                // each grown by the same number of pixels (uEdgeSize of the larger video side) on every
+                // side. A fragment samples the smallest copy containing it, so rays fan out relative to
+                // the video width/height rather than radially from the center.
+                float2 offsetPx = p * videoHalfSizePx;
+                float growPx = max(abs(offsetPx.x) - videoHalfSizePx.x, abs(offsetPx.y) - videoHalfSizePx.y);
+                float stepPx = max(uEdgeSize * max(videoHalfSizePx.x, videoHalfSizePx.y), 1.0);
+                // Continuous level instead of Kroos' ceil(): discrete levels show up as a staircase
+                // in narrow glow areas. +0.5 keeps his average sampling depth (half a step inside).
+                float level = growPx / stepPx + 0.5;
+                float2 copyHalfPx = videoHalfSizePx + level * stepPx;
+                color = sampleVideo(clamp(offsetPx / copyHalfPx, -1.0, 1.0) * 0.5 + 0.5);
 
-                    // Isotropic distance falloff matching Wessel Kroos' projector-shadow.js
-                    float r = (abs(p.x) >= abs(p.y)) ? ratio.x : ratio.y;
-                    float maxDist = max(spread * 2.2 * r, 0.01);
-                    float dist = (s - 1.0) / maxDist;
+                // Isotropic distance falloff in physical pixels (rounded around corners),
+                // reach is relative to video width as in Wessel Kroos' projector-shadow.js
+                float2 outsidePx = max(abs(p) - 1.0, float2(0.0)) * videoHalfSizePx;
+                float maxDistPx = max(spread * 2.2 * videoHalfSizePx.x, 1.0);
+                float dist = length(outsidePx) / maxDistPx;
 
-                    if (dist < 1.0) {
-                        float fadeStart = uFadeStart;
-                        float easing = 16.0 / (max(uFadeCurve, 1.0) * 0.64);
-                        float fadeProgress = clamp((dist - fadeStart) / max(1.0 - fadeStart, 0.001), 0.0, 1.0);
-                        float shadowAlpha = pow(fadeProgress, easing);
-                        falloff = (1.0 - shadowAlpha) * dirMask;
-                    }
+                if (dist < 1.0 && dirMask > 0.0) {
+                    float fadeStart = uFadeStart;
+                    float easing = 16.0 / (max(uFadeCurve, 1.0) * 0.64);
+                    float fadeProgress = clamp((dist - fadeStart) / max(1.0 - fadeStart, 0.001), 0.0, 1.0);
+                    float shadowAlpha = pow(fadeProgress, easing);
+                    falloff = 1.0 - shadowAlpha;
                 }
             }
-
-            // Apply letterbox crop compensation
-            float2 croppedUV = uCropOffset + (normVideoUV * uCropScale);
-            croppedUV = clamp(croppedUV, float2(0.0), float2(1.0));
-
-            // Bilinear texture sample evaluated in downsampled pixel coordinates
-            half4 color = videoTexture.eval(croppedUV * uTextureResolution);
 
             // Contrast adjustment (around midpoint 0.5)
             if (uContrast != 1.0) {
@@ -235,7 +238,8 @@ internal class AmbientShader : AmbientShaderDelegate {
     }
 
     override fun updateVibrance(vibrance: Float) {
-        runtimeShader.setFloatUniform("uVibrance", vibrance)
+        // saturateValue() is only defined for [-1, 1]; beyond that the curve divides by zero (NaN colors)
+        runtimeShader.setFloatUniform("uVibrance", vibrance.coerceIn(-1f, 1f))
     }
 
     override fun updateBrightness(brightness: Float) {

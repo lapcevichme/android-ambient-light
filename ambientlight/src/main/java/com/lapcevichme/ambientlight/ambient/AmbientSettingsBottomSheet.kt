@@ -414,7 +414,7 @@ fun AmbientSettingsContent(
                     valueText = "${(brightness * 100).toInt()}%",
                     value = brightness,
                     onValueChange = onBrightnessChange,
-                    valueRange = 0.2f..2.0f,
+                    valueRange = 0f..2.0f,
                     colors = colors
                 )
 
@@ -424,7 +424,7 @@ fun AmbientSettingsContent(
                     valueText = "${(vibrance * 100).toInt()}%",
                     value = vibrance,
                     onValueChange = onVibranceChange,
-                    valueRange = 0.5f..2.5f,
+                    valueRange = 0f..1f,
                     colors = colors
                 )
 
@@ -434,7 +434,7 @@ fun AmbientSettingsContent(
                     valueText = "${String.format(Locale.US, "%.2f", spreadLimit)}x",
                     value = spreadLimit,
                     onValueChange = onSpreadLimitChange,
-                    valueRange = 0.5f..2.5f,
+                    valueRange = 0f..2.5f,
                     colors = colors
                 )
 
@@ -444,7 +444,7 @@ fun AmbientSettingsContent(
                     valueText = "${(edgeSize * 100).toInt()}%",
                     value = edgeSize,
                     onValueChange = onEdgeSizeChange,
-                    valueRange = 0.05f..0.40f,
+                    valueRange = 0f..0.50f,
                     colors = colors
                 )
 
