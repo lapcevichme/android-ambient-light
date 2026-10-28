@@ -28,6 +28,9 @@ internal class LetterboxDetector(
     private val historySize: Int = 16,               // Sliding window size (Kroos' averageHistorySize)
     private val smoothingSpeed: Float = 0.15f        // Smooth reframing factor
 ) {
+    private val deadband = 0.03f
+    private val maxAsymmetry = 0.05f
+
     private var currentBounds = CropBounds()
     private var targetBounds = CropBounds()
     private val history = ArrayDeque<CropBounds>(historySize)
@@ -108,41 +111,14 @@ internal class LetterboxDetector(
             }
         }
 
-        // 3. WESSEL'S SYMMETRY VALIDATION:
-        // Real letterbox/pillarbox bars are symmetric.
+        // 3. WESSEL'S SYMMETRY VALIDATION + 4. DEADBAND:
+        // Real letterbox/pillarbox bars are symmetric and exist on BOTH sides.
         // If one side has dark rows and the other has none, it's scene content (sky/vignette), not a bar.
-        var topNorm = rawTopRows.toFloat() / height
-        var bottomNorm = rawBottomRows.toFloat() / height
-        var leftNorm = rawLeftCols.toFloat() / width
-        var rightNorm = rawRightCols.toFloat() / width
+        // The narrower side is used so a dark scene edge next to a real bar never crops into content.
+        val verticalBar = symmetricBar(rawTopRows.toFloat() / height, rawBottomRows.toFloat() / height)
+        val horizontalBar = symmetricBar(rawLeftCols.toFloat() / width, rawRightCols.toFloat() / width)
 
-        val verticalDiff = abs(topNorm - bottomNorm)
-        if (verticalDiff > 0.08f) {
-            // Asymmetric vertical bars: invalidate
-            topNorm = 0f
-            bottomNorm = 0f
-        } else {
-            val avg = (topNorm + bottomNorm) / 2f
-            topNorm = avg
-            bottomNorm = avg
-        }
-
-        val horizontalDiff = abs(leftNorm - rightNorm)
-        if (horizontalDiff > 0.08f) {
-            // Asymmetric horizontal bars: invalidate
-            leftNorm = 0f
-            rightNorm = 0f
-        } else {
-            val avg = (leftNorm + rightNorm) / 2f
-            leftNorm = avg
-            rightNorm = avg
-        }
-
-        // 4. DEADBAND: Bars < 3% of the screen are noise/subpixel border artifacts -> snap to 0
-        if (topNorm < 0.03f) { topNorm = 0f; bottomNorm = 0f }
-        if (leftNorm < 0.03f) { leftNorm = 0f; rightNorm = 0f }
-
-        val candidate = CropBounds(topNorm, bottomNorm, leftNorm, rightNorm)
+        val candidate = CropBounds(verticalBar, verticalBar, horizontalBar, horizontalBar)
 
         // 5. WESSEL'S HISTORY BUFFER & MAJORITY FILTER (occurrences check):
         // Prevents any transient 1-2 frame flash or cut from twitching the aspect ratio.
@@ -176,6 +152,18 @@ internal class LetterboxDetector(
         )
 
         return currentBounds
+    }
+
+    /**
+     * Returns the common bar depth for two opposite sides, or 0 when they are not a real bar pair:
+     * either side below the 3% deadband (noise/subpixel artifacts) or sides differing by more than
+     * [maxAsymmetry] (scene content).
+     */
+    private fun symmetricBar(a: Float, b: Float): Float {
+        val narrow = minOf(a, b)
+        if (narrow < deadband) return 0f
+        if (abs(a - b) > maxAsymmetry) return 0f
+        return narrow
     }
 
     private fun isRowBlack(pixels: IntArray, y: Int, width: Int): Boolean {

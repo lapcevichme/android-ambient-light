@@ -424,7 +424,7 @@ fun AmbientSettingsContent(
                     valueText = "${(vibrance * 100).toInt()}%",
                     value = vibrance,
                     onValueChange = onVibranceChange,
-                    valueRange = 0.5f..2.5f,
+                    valueRange = 0f..1f,
                     colors = colors
                 )
 

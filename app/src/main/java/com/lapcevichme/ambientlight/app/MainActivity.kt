@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -93,6 +94,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
@@ -109,6 +111,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.lapcevichme.ambientlight.ambient.AmbientBackdropView
 import com.lapcevichme.ambientlight.ambient.AmbientSettingsBottomSheet
@@ -229,6 +232,8 @@ fun AmbientSandboxScreen() {
     var playbackStatusRes by remember { mutableIntStateOf(R.string.demo_status_loading) }
     var playbackErrorCode by remember { mutableStateOf<String?>(null) }
     var framesCount by remember { mutableLongStateOf(0L) }
+    // Real display aspect ratio of the current video (ExoPlayer stretches frames to fill a bare TextureView)
+    var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
 
     // ExoPlayer lifecycle management
     val exoPlayer = remember {
@@ -296,6 +301,12 @@ fun AmbientSandboxScreen() {
             override fun onPlayerError(error: PlaybackException) {
                 playbackErrorCode = error.errorCodeName
             }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    videoAspect = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+                }
+            }
         }
         exoPlayer.addListener(listener)
         onDispose {
@@ -334,6 +345,7 @@ fun AmbientSandboxScreen() {
             backdropView = backdropView,
             textureView = textureView,
             exoPlayer = exoPlayer,
+            videoAspect = videoAspect,
             videoTitle = activeVideoTitle,
             isEnabled = ambientState.isEnabled,
             onToggleEnabled = { ambientState.isEnabled = it },
@@ -345,6 +357,7 @@ fun AmbientSandboxScreen() {
             backdropView = backdropView,
             textureView = textureView,
             exoPlayer = exoPlayer,
+            videoAspect = videoAspect,
             activeVideoTitle = activeVideoTitle,
             onEnterFullscreen = { isFullscreen = true },
             onOpenSettings = { showSettingsSheet = true },
@@ -563,6 +576,7 @@ fun FullscreenLandscapePlayer(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
     exoPlayer: ExoPlayer,
+    videoAspect: Float,
     videoTitle: String,
     isEnabled: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
@@ -593,10 +607,10 @@ fun FullscreenLandscapePlayer(
             modifier = Modifier.fillMaxSize()
         )
 
-        // LAYER 1: Centered 16:9 Video (sitting seamlessly flush on the ambient backdrop)
+        // LAYER 1: Centered video at its real aspect ratio (sitting seamlessly flush on the ambient backdrop)
         Box(
             modifier = Modifier
-                .aspectRatio(16f / 9f)
+                .aspectRatio(videoAspect)
                 .align(Alignment.Center)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.Black)
@@ -703,6 +717,7 @@ fun PortraitSandboxView(
     backdropView: AmbientBackdropView,
     textureView: InterceptingTextureView,
     exoPlayer: ExoPlayer,
+    videoAspect: Float,
     activeVideoTitle: String,
     onEnterFullscreen: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -776,41 +791,55 @@ fun PortraitSandboxView(
                         Spacer(modifier = Modifier.height(6.dp))
                     }
 
-                    // Video Player (edge-to-edge full width or card mode with rounded corners)
-                    val playerModifier = if (isCardMode) {
+                    // Video Player (edge-to-edge full width or card mode with rounded corners).
+                    // Sized to the real video aspect ratio; tall videos are height-capped and centered.
+                    val maxPlayerHeight = LocalConfiguration.current.screenHeightDp.dp * 0.6f
+                    val playerSlotModifier = if (isCardMode) {
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 6.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black)
-                            .aspectRatio(16f / 9f)
+                            .heightIn(max = maxPlayerHeight)
                     } else {
                         Modifier
                             .fillMaxWidth()
+                            .heightIn(max = maxPlayerHeight)
+                    }
+                    val playerModifier = if (isCardMode) {
+                        Modifier
+                            .aspectRatio(videoAspect)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.Black)
-                            .aspectRatio(16f / 9f)
+                    } else {
+                        Modifier
+                            .aspectRatio(videoAspect)
+                            .background(Color.Black)
                     }
 
                     Box(
-                        modifier = playerModifier
+                        modifier = playerSlotModifier,
+                        contentAlignment = Alignment.Center
                     ) {
-                        AndroidView(
-                            factory = {
-                                textureView.apply {
-                                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-                                        view.post { updateVideoCoordinates(view, backdropView) }
+                        Box(
+                            modifier = playerModifier
+                        ) {
+                            AndroidView(
+                                factory = {
+                                    textureView.apply {
+                                        addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                                            view.post { updateVideoCoordinates(view, backdropView) }
+                                        }
                                     }
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
 
-                        // Overlaid controls with Scrubber, Play/Pause, Fullscreen toggle, and Settings gear
-                        VideoPlayerControls(
-                            exoPlayer = exoPlayer,
-                            onEnterFullscreen = onEnterFullscreen,
-                            onOpenSettings = onOpenSettings
-                        )
+                            // Overlaid controls with Scrubber, Play/Pause, Fullscreen toggle, and Settings gear
+                            VideoPlayerControls(
+                                exoPlayer = exoPlayer,
+                                onEnterFullscreen = onEnterFullscreen,
+                                onOpenSettings = onOpenSettings
+                            )
+                        }
                     }
 
                     // Playback status or error indicator
