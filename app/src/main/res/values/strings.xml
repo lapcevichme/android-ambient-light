@@ -37,15 +37,15 @@
     <string name="ambient_reset_defaults">Reset all settings to default</string>
 
     <!-- Demo Player Sandbox Strings -->
-    <string name="demo_quick_settings">Ambient Light (Ambient Mode)</string>
+    <string name="demo_quick_settings">Ambient Light</string>
     <string name="demo_quick_settings_action">Configure →</string>
     <string name="demo_video_source_title">VIDEO SOURCE (DEMO PLAYER)</string>
     <string name="demo_player_mode_title">Showcase 360° glow</string>
     <string name="demo_player_mode_card_desc">Card style (side padding &amp; rounded corners)</string>
     <string name="demo_player_mode_edge_desc">YouTube mobile (edge-to-edge full width)</string>
-    <string name="demo_pick_gallery">📁 Choose video from gallery</string>
-    <string name="demo_pick_gallery_another">📁 Choose another video from gallery</string>
-    <string name="demo_return_sample">🔄 Return to offline test video</string>
+    <string name="demo_pick_gallery">Choose video from gallery</string>
+    <string name="demo_pick_gallery_another">Choose another video from gallery</string>
+    <string name="demo_return_sample">Return to offline test video</string>
     <string name="demo_exit_fullscreen">← Exit fullscreen</string>
     <string name="demo_fullscreen_badge">%1$s • Fullscreen ambient light mode</string>
     <string name="demo_ambient_label">Ambient light:</string>

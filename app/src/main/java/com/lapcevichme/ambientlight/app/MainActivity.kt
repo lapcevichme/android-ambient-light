@@ -52,6 +52,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Share
@@ -253,7 +255,8 @@ fun AmbientSandboxScreen() {
 
     val defaultDemoTitle = stringResource(R.string.demo_sample_offline)
     val defaultGalleryName = stringResource(R.string.gallery_video_default_name)
-    val activeVideoTitle = customVideoName ?: defaultDemoTitle
+    // Fallback titles are resolved on every composition so they follow locale changes
+    val activeVideoTitle = customVideoName ?: if (customVideoUri != null) defaultGalleryName else defaultDemoTitle
     val playbackStatus = stringResource(playbackStatusRes)
     val playbackError = playbackErrorCode?.let { stringResource(R.string.demo_playback_error, it) }
 
@@ -261,8 +264,7 @@ fun AmbientSandboxScreen() {
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val name = queryDisplayName(context, uri) ?: defaultGalleryName
-            customVideoName = name
+            customVideoName = queryDisplayName(context, uri)
             if (customVideoUri == uri) {
                 playbackErrorCode = null
                 exoPlayer.seekTo(0)
@@ -532,11 +534,12 @@ fun VideoPlayerControls(
                         }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (isPlaying) "⏸" else "▶",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
+                        // Vector icons: the ⏸/▶ emoji render as colored emoji glyphs on many devices
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
                 }
