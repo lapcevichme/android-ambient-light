@@ -56,6 +56,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var isAmbientEnabled: Boolean = true
         set(value) {
+            if (field == value) return
             field = value
             postInvalidateOnAnimation()
         }
@@ -65,6 +66,7 @@ class AmbientBackdropView @JvmOverloads constructor(
      */
     var spreadLimit: Float = 0.55f
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateSpreadLimit(value)
             updateFallbackGeometry()
@@ -76,6 +78,7 @@ class AmbientBackdropView @JvmOverloads constructor(
      */
     var edgeSize: Float = 0.12f
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateEdgeSize(value)
             refreshFallbackBuffer()
@@ -84,6 +87,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var brightness: Float = 1.0f
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateBrightness(value)
             updateFallbackColorMatrix()
@@ -92,6 +96,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var vibrance: Float = 0.0f
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateVibrance(value)
             updateFallbackColorMatrix()
@@ -100,6 +105,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var contrast: Float = 1.0f
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateContrast(value)
             updateFallbackColorMatrix()
@@ -108,24 +114,28 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var directionTop: Boolean = true
         set(value) {
+            if (field == value) return
             field = value
             syncDirections()
         }
 
     var directionBottom: Boolean = true
         set(value) {
+            if (field == value) return
             field = value
             syncDirections()
         }
 
     var directionLeft: Boolean = true
         set(value) {
+            if (field == value) return
             field = value
             syncDirections()
         }
 
     var directionRight: Boolean = true
         set(value) {
+            if (field == value) return
             field = value
             syncDirections()
         }
@@ -138,6 +148,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var fadeStart: Float = 0.15f
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateFadeParams(fadeStart, fadeCurve)
             refreshFallbackBuffer()
@@ -146,6 +157,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var fadeCurve: Float = 35f
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateFadeParams(fadeStart, fadeCurve)
             refreshFallbackBuffer()
@@ -154,6 +166,7 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var isOledMode: Boolean = false
         set(value) {
+            if (field == value) return
             field = value
             ambientShader?.updateOledMode(value)
             updateFallbackAlpha()
@@ -162,8 +175,13 @@ class AmbientBackdropView @JvmOverloads constructor(
 
     var isLetterboxDetectionEnabled: Boolean = true
 
-    var blurRadius: Float = 50f
+    /**
+     * Blur strength as in youtube-ambilight: Gaussian sigma = 0.25% of the player height per unit,
+     * so the default 30 equals the extension's default and scales with the player size.
+     */
+    var blur: Float = 30f
         set(value) {
+            if (field == value) return
             field = value
             updateBlurEffect()
             postInvalidateOnAnimation()
@@ -220,13 +238,21 @@ class AmbientBackdropView @JvmOverloads constructor(
         }
     }
 
+    private var appliedBlurRadius = -1f
+
     private fun updateBlurEffect() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (blurRadius > 1f) {
-                setRenderEffect(RenderEffect.createBlurEffect(blurRadius, blurRadius, Shader.TileMode.CLAMP))
-            } else {
-                setRenderEffect(null)
-            }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val playerHeight = if (hasVideoPosition) lastPixelBottom - lastPixelTop else height.toFloat()
+        // Kroos: blurPx = blur2 * (projectorHeight / 512) * 1.275 ≈ 0.0025 * blur2 * height (CSS blur = sigma).
+        // RenderEffect takes a radius and converts it with sigma = 0.57735 * radius + 0.5, so invert that.
+        val sigma = 0.0025f * blur * playerHeight.coerceAtLeast(0f)
+        val radius = if (sigma > 0.5f) (sigma - 0.5f) / 0.57735f else 0f
+        if (kotlin.math.abs(radius - appliedBlurRadius) < 0.5f) return
+        appliedBlurRadius = radius
+        if (radius > 1f) {
+            setRenderEffect(RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP))
+        } else {
+            setRenderEffect(null)
         }
     }
 
@@ -250,6 +276,7 @@ class AmbientBackdropView @JvmOverloads constructor(
         videoNormBottom = (pixelBottom / h).coerceIn(0f, 1f)
 
         ambientShader?.updateVideoRect(videoNormLeft, videoNormTop, videoNormRight, videoNormBottom)
+        updateBlurEffect()
         updateFallbackGeometry()
         postInvalidateOnAnimation()
     }
@@ -596,56 +623,66 @@ class AmbientBackdropView @JvmOverloads constructor(
         }
 
         // Extract average ambient color for UI elevation shadow tints
-        computeAverageColor(smoothed)
+        computeAverageColor(smoothed, crop)
 
         postInvalidateOnAnimation()
     }
 
-    private var lastAvgR = 40
-    private var lastAvgG = 40
-    private var lastAvgB = 40
+    // Smoothed average color kept as floats: integer steps of 0.2 * diff stall up to 4 levels short
+    private var lastAvgR = 40f
+    private var lastAvgG = 40f
+    private var lastAvgB = 40f
+    private var reportedColor = Color.TRANSPARENT
+    private var averagePixels = IntArray(0)
 
-    private fun computeAverageColor(bitmap: Bitmap) {
+    private fun computeAverageColor(bitmap: Bitmap, crop: CropBounds) {
         val needsListener = onDominantColorListener != null
         if (!needsListener && !isOledMode) return
+
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= 0 || height <= 0) return
+        if (averagePixels.size != width * height) averagePixels = IntArray(width * height)
+        bitmap.getPixels(averagePixels, 0, width, 0, 0, width, height)
+
+        // Only the visible content: black bars would darken the average (and over-suppress OLED glow)
+        val x0 = (crop.left * width).toInt().coerceIn(0, width - 1)
+        val x1 = ((1f - crop.right) * width).toInt().coerceIn(x0 + 1, width)
+        val y0 = (crop.top * height).toInt().coerceIn(0, height - 1)
+        val y1 = ((1f - crop.bottom) * height).toInt().coerceIn(y0 + 1, height)
 
         var sumR = 0L
         var sumG = 0L
         var sumB = 0L
-        val width = bitmap.width
-        val height = bitmap.height
-        val total = width * height
-
-        if (total == 0) return
-        val pixels = IntArray(total)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-        for (pixel in pixels) {
-            sumR += Color.red(pixel)
-            sumG += Color.green(pixel)
-            sumB += Color.blue(pixel)
+        for (y in y0 until y1) {
+            val row = y * width
+            for (x in x0 until x1) {
+                val pixel = averagePixels[row + x]
+                sumR += Color.red(pixel)
+                sumG += Color.green(pixel)
+                sumB += Color.blue(pixel)
+            }
         }
+        val total = ((x1 - x0) * (y1 - y0)).toFloat()
 
-        val targetR = (sumR / total).toInt().coerceIn(0, 255)
-        val targetG = (sumG / total).toInt().coerceIn(0, 255)
-        val targetB = (sumB / total).toInt().coerceIn(0, 255)
-
-        val smoothedR = (lastAvgR + (targetR - lastAvgR) * 0.2f).toInt()
-        val smoothedG = (lastAvgG + (targetG - lastAvgG) * 0.2f).toInt()
-        val smoothedB = (lastAvgB + (targetB - lastAvgB) * 0.2f).toInt()
-
-        val hasChanged = kotlin.math.abs(smoothedR - lastAvgR) >= 2 ||
-            kotlin.math.abs(smoothedG - lastAvgG) >= 2 ||
-            kotlin.math.abs(smoothedB - lastAvgB) >= 2
-
-        lastAvgR = smoothedR
-        lastAvgG = smoothedG
-        lastAvgB = smoothedB
+        lastAvgR += (sumR / total - lastAvgR) * 0.2f
+        lastAvgG += (sumG / total - lastAvgG) * 0.2f
+        lastAvgB += (sumB / total - lastAvgB) * 0.2f
 
         updateFallbackAlpha()
 
+        val color = Color.rgb(
+            (lastAvgR + 0.5f).toInt().coerceIn(0, 255),
+            (lastAvgG + 0.5f).toInt().coerceIn(0, 255),
+            (lastAvgB + 0.5f).toInt().coerceIn(0, 255)
+        )
+        // Report once the color drifted noticeably from the last reported one (not per smoothing step)
+        val hasChanged = kotlin.math.abs(Color.red(color) - Color.red(reportedColor)) >= 2 ||
+            kotlin.math.abs(Color.green(color) - Color.green(reportedColor)) >= 2 ||
+            kotlin.math.abs(Color.blue(color) - Color.blue(reportedColor)) >= 2
         if (hasChanged) {
-            onDominantColorListener?.invoke(Color.rgb(smoothedR, smoothedG, smoothedB))
+            reportedColor = color
+            onDominantColorListener?.invoke(color)
         }
     }
 

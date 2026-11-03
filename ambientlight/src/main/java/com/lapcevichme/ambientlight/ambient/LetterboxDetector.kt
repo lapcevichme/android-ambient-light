@@ -31,6 +31,7 @@ internal class LetterboxDetector(
     private val deadband = 0.03f
     private val maxAsymmetry = 0.05f
 
+    private var pixelBuffer = IntArray(0)
     private var currentBounds = CropBounds()
     private var targetBounds = CropBounds()
     private val history = ArrayDeque<CropBounds>(historySize)
@@ -40,7 +41,8 @@ internal class LetterboxDetector(
         val height = bitmap.height
         if (width <= 0 || height <= 0) return currentBounds
 
-        val pixels = IntArray(width * height)
+        if (pixelBuffer.size != width * height) pixelBuffer = IntArray(width * height)
+        val pixels = pixelBuffer
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
         // 1. WESSEL'S DARK SCENE GUARD:
