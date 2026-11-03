@@ -36,7 +36,7 @@ internal interface AmbientShaderDelegate {
  *
  * Implements:
  * 1. Perimeter sampling: Kroos-style stacked projector copies grown by equal pixel steps (edge size).
- * 2. Letterbox/pillarbox crop compensation.
+ * 2. Letterbox/pillarbox crop: per axis, the projector shrinks to the content for glow crossing the bars.
  * 3. Vibrance boosting in HSV color space.
  * 4. Center attenuation: dims pixels directly underneath the player so no sharp duplicate video is rendered.
  * 5. Radial distance falloff: smoothly dissolves light into the page background.
@@ -92,69 +92,72 @@ internal class AmbientShader : AmbientShaderDelegate {
             return (v >= 0.0) ? y : (1.0 - y);
         }
 
-        // Samples the video frame at normalized video UV with letterbox crop compensation
-        half4 sampleVideo(float2 normVideoUV) {
-            float2 croppedUV = clamp(uCropOffset + (normVideoUV * uCropScale), float2(0.0), float2(1.0));
-            return videoTexture.eval(croppedUV * uTextureResolution);
+        float glowFalloff(float distPx, float maxDistPx) {
+            float dist = distPx / maxDistPx;
+            if (dist >= 1.0) return 0.0;
+            float easing = 16.0 / (max(uFadeCurve, 1.0) * 0.64);
+            float fadeProgress = clamp((dist - uFadeStart) / max(1.0 - uFadeStart, 0.001), 0.0, 1.0);
+            return 1.0 - pow(fadeProgress, easing);
         }
 
-        half4 main(float2 fragCoord) {
-            float2 uv = fragCoord / uResolution;
+        // Wessel Kroos' projector (projector-webgl.js multiTexture) for a projector rect given as a crop of
+        // the player: stacked copies of the frame, each grown by the same number of pixels on every side.
+        // A fragment samples the smallest copy containing it, so rays fan out relative to the projector
+        // size rather than radially from the center. Returns the color in rgb and the falloff in alpha.
+        half4 project(float2 fragPx, float2 playerMinPx, float2 playerSizePx, float2 cropOffset, float2 cropScale,
+                      float stepPx, float maxDistPx) {
+            float2 halfPx = max(cropScale * playerSizePx * 0.5, float2(0.5));
+            float2 offsetPx = fragPx - (playerMinPx + cropOffset * playerSizePx + halfPx);
+            float growPx = max(abs(offsetPx.x) - halfPx.x, abs(offsetPx.y) - halfPx.y);
 
-            // Video center and half-size in backdrop coordinates [0, 1]
-            float2 videoCenter = (uVideoRect.xy + uVideoRect.zw) * 0.5;
-            float2 videoHalfSize = max((uVideoRect.zw - uVideoRect.xy) * 0.5, float2(0.001));
-            float2 videoHalfSizePx = videoHalfSize * uResolution;
-
-            // Fragment vector from video center normalized by video half-size
-            // At video perimeter, max(abs(p.x), abs(p.y)) == 1.0
-            float2 p = (uv - videoCenter) / videoHalfSize;
-            float s = max(abs(p.x), abs(p.y));
-
-            // Maximum expansion scale
-            float spread = max(uSpreadLimit, 0.01);
-
-            half4 color;
-            float falloff = 0.0;
-
-            if (s <= 1.0) {
-                // Inside video bounds: solid full brightness so blur does not create dark dips near borders
-                color = sampleVideo(p * 0.5 + 0.5);
-                falloff = 1.0;
+            float2 q;
+            float falloff = 1.0;
+            if (growPx <= 0.0) {
+                q = offsetPx / halfPx;
             } else {
-                // Directional masking (Wessel Kroos directions filter):
-                float dirMask = 1.0;
-                if (p.y < -1.0 && uDirections.x < 0.5) dirMask = 0.0; // Top disabled
-                if (p.x > 1.0 && uDirections.y < 0.5) dirMask = 0.0;  // Right disabled
-                if (p.y > 1.0 && uDirections.z < 0.5) dirMask = 0.0;  // Bottom disabled
-                if (p.x < -1.0 && uDirections.w < 0.5) dirMask = 0.0; // Left disabled
-
-                // Wessel Kroos' projector (projector-webgl.js multiTexture): stacked copies of the frame,
-                // each grown by the same number of pixels (uEdgeSize of the larger video side) on every
-                // side. A fragment samples the smallest copy containing it, so rays fan out relative to
-                // the video width/height rather than radially from the center.
-                float2 offsetPx = p * videoHalfSizePx;
-                float growPx = max(abs(offsetPx.x) - videoHalfSizePx.x, abs(offsetPx.y) - videoHalfSizePx.y);
-                float stepPx = max(uEdgeSize * max(videoHalfSizePx.x, videoHalfSizePx.y), 1.0);
                 // Continuous level instead of Kroos' ceil(): discrete levels show up as a staircase
                 // in narrow glow areas. +0.5 keeps his average sampling depth (half a step inside).
                 float level = growPx / stepPx + 0.5;
-                float2 copyHalfPx = videoHalfSizePx + level * stepPx;
-                color = sampleVideo(clamp(offsetPx / copyHalfPx, -1.0, 1.0) * 0.5 + 0.5);
+                q = offsetPx / (halfPx + level * stepPx);
+                // Isotropic distance falloff in physical pixels (rounded around corners)
+                falloff = glowFalloff(length(max(abs(offsetPx) - halfPx, float2(0.0))), maxDistPx);
+            }
+            float2 textureUV = clamp(cropOffset + (clamp(q, -1.0, 1.0) * 0.5 + 0.5) * cropScale, float2(0.0), float2(1.0));
+            return half4(videoTexture.eval(textureUV * uTextureResolution).rgb, falloff);
+        }
 
-                // Isotropic distance falloff in physical pixels (rounded around corners),
-                // reach is relative to video width as in Wessel Kroos' projector-shadow.js
-                float2 outsidePx = max(abs(p) - 1.0, float2(0.0)) * videoHalfSizePx;
-                float maxDistPx = max(spread * 2.2 * videoHalfSizePx.x, 1.0);
-                float dist = length(outsidePx) / maxDistPx;
+        half4 main(float2 fragCoord) {
+            float2 playerMinPx = uVideoRect.xy * uResolution;
+            float2 playerSizePx = max((uVideoRect.zw - uVideoRect.xy) * uResolution, float2(1.0));
+            float2 playerHalfPx = playerSizePx * 0.5;
 
-                if (dist < 1.0 && dirMask > 0.0) {
-                    float fadeStart = uFadeStart;
-                    float easing = 16.0 / (max(uFadeCurve, 1.0) * 0.64);
-                    float fadeProgress = clamp((dist - fadeStart) / max(1.0 - fadeStart, 0.001), 0.0, 1.0);
-                    float shadowAlpha = pow(fadeProgress, easing);
-                    falloff = 1.0 - shadowAlpha;
-                }
+            // Step size and reach stay relative to the full player (Kroos' ratio)
+            float stepPx = max(uEdgeSize * max(playerHalfPx.x, playerHalfPx.y), 1.0);
+            float maxDistPx = max(max(uSpreadLimit, 0.01) * 2.2 * playerHalfPx.x, 1.0);
+
+            // Detected bars only matter for glow that has to cross them: letterbox (top/bottom) crop
+            // shrinks the projector for the glow above/below the player, pillarbox (left/right) crop for
+            // the glow at its sides. Otherwise a narrow pillarboxed column would light the whole width
+            // above the player through its side edges, unlike youtube-ambilight, which keeps the full player.
+            half4 vertical = project(fragCoord, playerMinPx, playerSizePx,
+                float2(0.0, uCropOffset.y), float2(1.0, uCropScale.y), stepPx, maxDistPx);
+            half4 horizontal = project(fragCoord, playerMinPx, playerSizePx,
+                float2(uCropOffset.x, 0.0), float2(uCropScale.x, 1.0), stepPx, maxDistPx);
+
+            // Blend across the player's diagonals (Kroos' direction triangles) to avoid a seam in the corners
+            float2 edgePx = abs(fragCoord - (playerMinPx + playerHalfPx)) - playerHalfPx;
+            // (narrow band: a wide one leaks side light into the outer corners)
+            float blendPx = max(stepPx * 0.25, 1.0);
+            float verticalWeight = smoothstep(-blendPx, blendPx, edgePx.y - edgePx.x);
+            half4 projected = mix(horizontal, vertical, verticalWeight);
+            half4 color = half4(projected.rgb, 1.0);
+            float falloff = projected.a;
+
+            // Directional masking (Wessel Kroos directions filter), relative to the player
+            float2 p = (fragCoord - (playerMinPx + playerHalfPx)) / playerHalfPx;
+            if ((p.y < -1.0 && uDirections.x < 0.5) || (p.x > 1.0 && uDirections.y < 0.5) ||
+                (p.y > 1.0 && uDirections.z < 0.5) || (p.x < -1.0 && uDirections.w < 0.5)) {
+                falloff = 0.0;
             }
 
             // Contrast adjustment (around midpoint 0.5)

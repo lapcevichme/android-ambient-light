@@ -7,7 +7,6 @@ import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.RenderEffect
 import android.graphics.Shader
@@ -45,8 +44,8 @@ class AmbientBackdropView @JvmOverloads constructor(
     private var fallbackLastFrame: Bitmap? = null
     private var fallbackLastCrop = CropBounds()
 
-    private val fallbackSrcRect = Rect()
     private val fallbackDstRect = RectF()
+    private val fallbackPlayer = RectF()
     private val fallbackPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val fallbackColorMatrix = ColorMatrix()
     private val tempColorMatrix = ColorMatrix()
@@ -436,64 +435,44 @@ class AmbientBackdropView @JvmOverloads constructor(
         if (fallbackFramePixels.size != fw * fh) fallbackFramePixels = IntArray(fw * fh)
         frame.getPixels(fallbackFramePixels, 0, fw, 0, 0, fw, fh)
 
-        val srcL = (crop.left * fw).toInt().coerceIn(0, fw - 1)
-        val srcT = (crop.top * fh).toInt().coerceIn(0, fh - 1)
-        val srcR = ((1f - crop.right) * fw).toInt().coerceIn(srcL + 1, fw)
-        val srcB = ((1f - crop.bottom) * fh).toInt().coerceIn(srcT + 1, fh)
-        fallbackSrcRect.set(srcL, srcT, srcR, srcB)
-
         val dst = fallbackDstRect
         if (dst.width() <= 0f || dst.height() <= 0f) return
-        val vL: Float
-        val vT: Float
-        val vR: Float
-        val vB: Float
         if (hasVideoPosition) {
-            vL = lastPixelLeft; vT = lastPixelTop; vR = lastPixelRight; vB = lastPixelBottom
+            fallbackPlayer.set(lastPixelLeft, lastPixelTop, lastPixelRight, lastPixelBottom)
         } else {
-            vL = dst.left; vT = dst.top; vR = dst.right; vB = dst.bottom
+            fallbackPlayer.set(dst)
         }
-        val halfW = ((vR - vL) * 0.5f).coerceAtLeast(1f)
-        val halfH = ((vB - vT) * 0.5f).coerceAtLeast(1f)
-        val cx = (vL + vR) * 0.5f
-        val cy = (vT + vB) * 0.5f
-        val maxDistPx = (spreadLimit.coerceAtLeast(0.01f) * 2.2f * halfW).coerceAtLeast(1f)
-        val easing = 16f / (fadeCurve.coerceAtLeast(1f) * 0.64f)
-        val stepPx = (edgeSize * maxOf(halfW, halfH)).coerceAtLeast(1f)
+        val player = fallbackPlayer
+        // Step size and reach stay relative to the full player (same as the AGSL path)
+        val playerHalfW = (player.width() * 0.5f).coerceAtLeast(1f)
+        val playerHalfH = (player.height() * 0.5f).coerceAtLeast(1f)
+        val maxDistPx = (spreadLimit.coerceAtLeast(0.01f) * 2.2f * playerHalfW).coerceAtLeast(1f)
+        val stepPx = (edgeSize * maxOf(playerHalfW, playerHalfH)).coerceAtLeast(1f)
 
         val bw = fallbackBufferWidth
         val bh = fallbackBufferHeight
         for (by in 0 until bh) {
-            val py = (dst.top + (by + 0.5f) / bh * dst.height() - cy) / halfH
+            val fy = dst.top + (by + 0.5f) / bh * dst.height()
             for (bx in 0 until bw) {
-                val px = (dst.left + (bx + 0.5f) / bw * dst.width() - cx) / halfW
+                val fx = dst.left + (bx + 0.5f) / bw * dst.width()
                 val idx = by * bw + bx
 
-                val outsideX = kotlin.math.abs(px) > 1f
-                val outsideY = kotlin.math.abs(py) > 1f
-                if (!outsideX && !outsideY) {
-                    fallbackPixels[idx] = sampleFallbackFrame(px, py)
-                    continue
-                }
-                val masked = (py < -1f && !directionTop) || (px > 1f && !directionRight) ||
-                    (py > 1f && !directionBottom) || (px < -1f && !directionLeft)
-                val dx = (kotlin.math.abs(px) - 1f).coerceAtLeast(0f) * halfW
-                val dy = (kotlin.math.abs(py) - 1f).coerceAtLeast(0f) * halfH
-                val dist = kotlin.math.sqrt(dx * dx + dy * dy) / maxDistPx
-                if (masked || dist >= 1f) {
+                val masked = (fy < player.top && !directionTop) || (fx > player.right && !directionRight) ||
+                    (fy > player.bottom && !directionBottom) || (fx < player.left && !directionLeft)
+                if (masked) {
                     fallbackPixels[idx] = 0
                     continue
                 }
-                val fadeProgress = ((dist - fadeStart) / (1f - fadeStart).coerceAtLeast(0.001f)).coerceIn(0f, 1f)
-                val alpha = 1f - Math.pow(fadeProgress.toDouble(), easing.toDouble()).toFloat()
 
-                // Kroos projector: sample the smallest copy (grown by equal pixel steps) containing the cell
-                val offX = px * halfW
-                val offY = py * halfH
-                val growPx = maxOf(kotlin.math.abs(offX) - halfW, kotlin.math.abs(offY) - halfH)
-                val level = growPx / stepPx + 0.5f
-                val c = sampleFallbackFrame(offX / (halfW + level * stepPx), offY / (halfH + level * stepPx))
-                fallbackPixels[idx] = (c and 0x00FFFFFF) or ((alpha * 255f).toInt() shl 24)
+                // Letterbox crop only applies to the glow above/below, pillarbox crop to the glow at the
+                // sides, blended across the player's diagonals (see AmbientShader)
+                val vertical = projectFallback(fx, fy, 0f, crop.top, 0f, crop.bottom, stepPx, maxDistPx)
+                val horizontal = projectFallback(fx, fy, crop.left, 0f, crop.right, 0f, stepPx, maxDistPx)
+                val edgeX = kotlin.math.abs(fx - player.centerX()) - playerHalfW
+                val edgeY = kotlin.math.abs(fy - player.centerY()) - playerHalfH
+                val blendPx = (stepPx * 0.25f).coerceAtLeast(1f)
+                val t = ((edgeY - edgeX + blendPx) / (2f * blendPx)).coerceIn(0f, 1f)
+                fallbackPixels[idx] = lerpArgb(horizontal, vertical, t * t * (3f - 2f * t))
             }
         }
 
@@ -503,15 +482,56 @@ class AmbientBackdropView @JvmOverloads constructor(
         fallbackBuffer.setPixels(fallbackPixels, 0, bw, 0, 0, bw, bh)
     }
 
-    /** Nearest-neighbour read of the cropped frame at video-normalized coordinates in [-1, 1]. */
-    private fun sampleFallbackFrame(px: Float, py: Float): Int {
+    /**
+     * CPU version of AmbientShader.project(): Kroos projector for the player rect cropped by the given
+     * fractions. Returns the sampled color with the distance falloff as alpha.
+     */
+    private fun projectFallback(
+        fx: Float, fy: Float,
+        cropL: Float, cropT: Float, cropR: Float, cropB: Float,
+        stepPx: Float, maxDistPx: Float
+    ): Int {
+        val player = fallbackPlayer
+        val halfW = ((1f - cropL - cropR) * player.width() * 0.5f).coerceAtLeast(0.5f)
+        val halfH = ((1f - cropT - cropB) * player.height() * 0.5f).coerceAtLeast(0.5f)
+        val offX = fx - (player.left + cropL * player.width() + halfW)
+        val offY = fy - (player.top + cropT * player.height() + halfH)
+        val growPx = maxOf(kotlin.math.abs(offX) - halfW, kotlin.math.abs(offY) - halfH)
+
+        var alpha = 1f
+        var qx = offX / halfW
+        var qy = offY / halfH
+        if (growPx > 0f) {
+            // Sample the smallest copy (grown by equal pixel steps) containing the cell
+            val level = growPx / stepPx + 0.5f
+            qx = offX / (halfW + level * stepPx)
+            qy = offY / (halfH + level * stepPx)
+            val dx = (kotlin.math.abs(offX) - halfW).coerceAtLeast(0f)
+            val dy = (kotlin.math.abs(offY) - halfH).coerceAtLeast(0f)
+            val dist = kotlin.math.sqrt(dx * dx + dy * dy) / maxDistPx
+            if (dist >= 1f) return 0
+            val easing = 16f / (fadeCurve.coerceAtLeast(1f) * 0.64f)
+            val fadeProgress = ((dist - fadeStart) / (1f - fadeStart).coerceAtLeast(0.001f)).coerceIn(0f, 1f)
+            alpha = 1f - Math.pow(fadeProgress.toDouble(), easing.toDouble()).toFloat()
+        }
+        val u = cropL + (qx.coerceIn(-1f, 1f) * 0.5f + 0.5f) * (1f - cropL - cropR)
+        val v = cropT + (qy.coerceIn(-1f, 1f) * 0.5f + 0.5f) * (1f - cropT - cropB)
         val fw = fallbackLastFrame?.width ?: return 0
-        val src = fallbackSrcRect
-        val u = (px.coerceIn(-1f, 1f) * 0.5f + 0.5f)
-        val v = (py.coerceIn(-1f, 1f) * 0.5f + 0.5f)
-        val x = (src.left + u * src.width()).toInt().coerceIn(src.left, src.right - 1)
-        val y = (src.top + v * src.height()).toInt().coerceIn(src.top, src.bottom - 1)
-        return fallbackFramePixels[y * fw + x]
+        val fh = fallbackLastFrame?.height ?: return 0
+        val x = (u * fw).toInt().coerceIn(0, fw - 1)
+        val y = (v * fh).toInt().coerceIn(0, fh - 1)
+        return (fallbackFramePixels[y * fw + x] and 0x00FFFFFF) or ((alpha * 255f).toInt() shl 24)
+    }
+
+    private fun lerpArgb(a: Int, b: Int, t: Float): Int {
+        if (t <= 0f) return a
+        if (t >= 1f) return b
+        fun ch(shift: Int): Int {
+            val ca = (a ushr shift) and 0xFF
+            val cb = (b ushr shift) and 0xFF
+            return (ca + (cb - ca) * t).toInt() shl shift
+        }
+        return ch(24) or ch(16) or ch(8) or ch(0)
     }
 
     private fun fastBoxBlur(pixels: IntArray, temp: IntArray, w: Int, h: Int) {
