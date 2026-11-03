@@ -51,7 +51,7 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```
 dependencies {
-    implementation("com.github.lapcevichme:android-ambient-light:1.0.2")
+    implementation("com.github.lapcevichme:android-ambient-light:1.1.0")
 }
 ```
 
@@ -147,12 +147,12 @@ fun CustomAmbientControls(state: AmbientLightState) {
         Slider(
             value = state.brightness,
             onValueChange = { state.brightness = it },
-            valueRange = 0.5f..2.5f
+            valueRange = 0f..2f
         )
         Slider(
-            value = state.blurRadius,
-            onValueChange = { state.blurRadius = it },
-            valueRange = 10f..100f
+            value = state.blur,
+            onValueChange = { state.blur = it },
+            valueRange = 0f..100f
         )
         Button(onClick = { state.resetToDefaults() }) {
             Text("Reset to defaults")
@@ -167,7 +167,7 @@ fun CustomAmbientControls(state: AmbientLightState) {
 | ----- | ----- | ----- | ----- | 
 | `state.isEnabled` | `Boolean` | `true` | Master toggle to enable or disable ambient lighting | 
 | `state.brightness` | `Float` | `1.0f` | Light brightness multiplier (`0.0f` .. `2.0f`) | 
-| `state.blurRadius` | `Float` | `50f` | Hardware blur radius in px (`0f` .. `120f`) | 
+| `state.blur` | `Float` | `30f` | Blur strength as in youtube-ambilight: sigma = 0.25% of the player height per unit (`0f` .. `100f`) | 
 | `state.vibrance` | `Float` | `0.0f` | HSV saturation boost curve (`0.0f` .. `1.0f`) | 
 | `state.contrast` | `Float` | `1.0f` | Ray contrast factor (`0.5f` .. `1.5f`) | 
 | `state.spreadLimit` | `Float` | `0.40f` | Ray reach from video edges, relative to video width (`0.0f` .. `2.5f`) | 

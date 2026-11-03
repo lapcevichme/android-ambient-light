@@ -7,7 +7,7 @@
     <string name="ambient_status_active">Glow active</string>
     <string name="ambient_status_disabled">Effect disabled</string>
     <string name="ambient_section_basic">BASIC SETTINGS</string>
-    <string name="ambient_blur">Blur radius</string>
+    <string name="ambient_blur">Blur</string>
     <string name="ambient_brightness">Brightness</string>
     <string name="ambient_vibrance">Vibrance</string>
     <string name="ambient_spread_limit">Spread limit</string>

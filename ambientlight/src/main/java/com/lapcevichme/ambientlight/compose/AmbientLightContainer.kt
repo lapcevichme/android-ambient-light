@@ -26,7 +26,7 @@ import com.lapcevichme.ambientlight.player.InterceptingTextureView
 @Stable
 class AmbientLightState(
     initialEnabled: Boolean = true,
-    initialBlurRadius: Float = 50f,
+    initialBlur: Float = 30f,
     initialBrightness: Float = 1.0f,
     initialVibrance: Float = 0.0f,
     initialSpreadLimit: Float = 0.40f,
@@ -43,7 +43,7 @@ class AmbientLightState(
     initialDirectionRight: Boolean = true
 ) {
     var isEnabled by mutableStateOf(initialEnabled)
-    var blurRadius by mutableFloatStateOf(initialBlurRadius)
+    var blur by mutableFloatStateOf(initialBlur)
     var brightness by mutableFloatStateOf(initialBrightness)
     var vibrance by mutableFloatStateOf(initialVibrance)
     var spreadLimit by mutableFloatStateOf(initialSpreadLimit)
@@ -64,7 +64,7 @@ class AmbientLightState(
      */
     fun resetToDefaults() {
         isEnabled = true
-        blurRadius = 50f
+        blur = 30f
         brightness = 1.0f
         vibrance = 0.0f
         spreadLimit = 0.40f
@@ -86,7 +86,7 @@ class AmbientLightState(
      */
     fun applyTo(backdropView: AmbientBackdropView) {
         backdropView.isAmbientEnabled = isEnabled
-        backdropView.blurRadius = blurRadius
+        backdropView.blur = blur
         backdropView.brightness = brightness
         backdropView.vibrance = vibrance
         backdropView.spreadLimit = spreadLimit
@@ -110,7 +110,7 @@ class AmbientLightState(
 @Composable
 fun rememberAmbientLightState(
     initialEnabled: Boolean = true,
-    initialBlurRadius: Float = 50f,
+    initialBlur: Float = 30f,
     initialBrightness: Float = 1.0f,
     initialVibrance: Float = 0.0f,
     initialSpreadLimit: Float = 0.40f,
@@ -131,7 +131,7 @@ fun rememberAmbientLightState(
             save = { state ->
                 listOf(
                     state.isEnabled,
-                    state.blurRadius,
+                    state.blur,
                     state.brightness,
                     state.vibrance,
                     state.spreadLimit,
@@ -151,7 +151,7 @@ fun rememberAmbientLightState(
             restore = { list ->
                 AmbientLightState(
                     initialEnabled = list[0] as Boolean,
-                    initialBlurRadius = (list[1] as Number).toFloat(),
+                    initialBlur = (list[1] as Number).toFloat(),
                     initialBrightness = (list[2] as Number).toFloat(),
                     initialVibrance = (list[3] as Number).toFloat(),
                     initialSpreadLimit = (list[4] as Number).toFloat(),
@@ -171,7 +171,7 @@ fun rememberAmbientLightState(
         )
     ) {
         AmbientLightState(
-            initialEnabled, initialBlurRadius, initialBrightness, initialVibrance,
+            initialEnabled, initialBlur, initialBrightness, initialVibrance,
             initialSpreadLimit, initialEdgeSize, initialFlickerReduction, initialContrast,
             initialIsOledMode, initialDetectLetterbox, initialFadeStart, initialFadeCurve,
             initialDirectionTop, initialDirectionBottom, initialDirectionLeft, initialDirectionRight

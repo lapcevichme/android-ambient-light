@@ -113,8 +113,8 @@ fun AmbientSettingsBottomSheet(
         onDismissRequest = onDismissRequest,
         isEnabled = state.isEnabled,
         onEnabledChange = { state.isEnabled = it },
-        blurRadius = state.blurRadius,
-        onBlurRadiusChange = { state.blurRadius = it },
+        blur = state.blur,
+        onBlurChange = { state.blur = it },
         brightness = state.brightness,
         onBrightnessChange = { state.brightness = it },
         vibrance = state.vibrance,
@@ -159,8 +159,8 @@ fun AmbientSettingsBottomSheet(
     onDismissRequest: () -> Unit,
     isEnabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
-    blurRadius: Float,
-    onBlurRadiusChange: (Float) -> Unit,
+    blur: Float,
+    onBlurChange: (Float) -> Unit,
     brightness: Float,
     onBrightnessChange: (Float) -> Unit,
     vibrance: Float,
@@ -212,8 +212,8 @@ fun AmbientSettingsBottomSheet(
         AmbientSettingsContent(
             isEnabled = isEnabled,
             onEnabledChange = onEnabledChange,
-            blurRadius = blurRadius,
-            onBlurRadiusChange = onBlurRadiusChange,
+            blur = blur,
+            onBlurChange = onBlurChange,
             brightness = brightness,
             onBrightnessChange = onBrightnessChange,
             vibrance = vibrance,
@@ -258,8 +258,8 @@ fun AmbientSettingsBottomSheet(
 fun AmbientSettingsContent(
     isEnabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
-    blurRadius: Float,
-    onBlurRadiusChange: (Float) -> Unit,
+    blur: Float,
+    onBlurChange: (Float) -> Unit,
     brightness: Float,
     onBrightnessChange: (Float) -> Unit,
     vibrance: Float,
@@ -401,10 +401,10 @@ fun AmbientSettingsContent(
                 // Blur Radius
                 AmbientSliderItem(
                     label = stringResource(R.string.ambient_blur),
-                    valueText = "${blurRadius.toInt()} dp",
-                    value = blurRadius,
-                    onValueChange = onBlurRadiusChange,
-                    valueRange = 0f..120f,
+                    valueText = "${blur.toInt()}%",
+                    value = blur,
+                    onValueChange = onBlurChange,
+                    valueRange = 0f..100f,
                     colors = colors
                 )
 
